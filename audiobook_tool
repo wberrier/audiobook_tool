@@ -54,6 +54,8 @@ def lengthInSecondsMplayer(file):
     # str->float
     return float(seconds)
 
+# TODO: looks like ffplay shows fractions of a second, where the above two methods are whole seconds... hrm...
+
 def runOrDie(command):
     print "Running: " + command
     ret = os.system(command)
@@ -87,10 +89,35 @@ class Chapter:
 
         return "%02d:%02d:%02d.%s %s" % (hours, minutes, seconds, milliseconds_string, self.name)
 
+chapter_line_re = re.compile("(\d\d):(\d\d):(\d\d).(\d\d\d) (.*)")
+
+def parseChapterLine(line):
+    (hours, minutes, seconds, milliseconds, chapter_name) = chapter_line_re.search(line).groups()
+    total_seconds = 0.0
+    total_seconds += float(hours) * float(3600) + float(minutes) * 60 + float(seconds)
+    milli_num = 0.0
+    milli_num += float(milliseconds)
+    milli_num /= 1000
+    total_seconds += milli_num
+
+    return (total_seconds, chapter_name)
+
 class ChapterList:
-    def __init__(self):
+    def __init__(self, filename=""):
+        """Optionally parse filename to populate the chapter info"""
         self.chapters = []
         self.currentTimeMark = 0.0
+
+        if filename != "":
+            fd = open(filename)
+            for line in fd.readlines():
+                (seconds, name) = parseChapterLine(line)
+                self.addChapter(seconds, name)
+            fd.close()
+
+    def addChapter(self, seconds, chapter_name):
+        self.chapters.append(Chapter(seconds, chapter_name))
+        self.currentTimeMark = seconds
 
     def addChapterFromFile(self, filename):
 
@@ -103,9 +130,11 @@ class ChapterList:
         #self.currentTimeMark += lengthInSecondsMplayer(filename)
         self.currentTimeMark += lengthInSecondsTagLib(filename)
 
-    def playNumSeconds(self, chapterIndex, numSeconds):
+    def play(self, audio_file, numSeconds, chapterIndex):
         """Easily play at a spot in a chapter to assist in verifying all chapter marks"""
-        pass
+        # TODO: is mplayer accurate when it comes to seeking?
+        #  Plus, we can only seek to second boundaries... hrm...
+        os.system("mplayer -ss %d -endpos %s %s" % (self.chapters[int(chapterIndex) - 1].timeMark, numSeconds, audio_file))
 
     def modifyChapterTimeMark(self, chapterIndex, adjustNumSeconds, adjustSuccessive=False):
         """Easily adjust chapter markings, optionally adjusting each successive chapter
@@ -266,6 +295,21 @@ def combineAndEncode(args):
     output_format_options = "-acodec %s -ar %s -ab %s -ac %s -f %s" % (output_codec, output_rate, output_bitrate, output_channels, output_format)
     runOrDie("( %s ) | ffmpeg -v 0 -y %s -i /dev/stdin %s '%s'" % (player_command, intermediate_format_options, output_format_options, output))
 
+    return 0
+
+def playChapterSample(args):
+    try:
+        (chapter_txt, audio_file, seconds, chapter_index) = args
+    except:
+        usage()
+        sys.exit(1)
+
+    cl = ChapterList(chapter_txt)
+
+    cl.play(audio_file, seconds, chapter_index)
+
+    return 0
+
 
 def usage():
     usage_text="""
@@ -277,7 +321,7 @@ def usage():
   combine_and_encode  <AudioBook.[mp3|m4b|ogg]> <ffmpeg recognizable audio files>
 
   gen_chapter_list    <AudioBook.chapters.txt> <audio files>
-  *play_chapter       <AudioBook.chapters.txt> <AudioBook.m4b> <chapter index> <seconds>
+  play_chapter        <AudioBook.chapters.txt> <AudioBook.m4b> <seconds> <chapter index>
   *adjust_chapter     <AudioBook.chapters.txt> <chapter index> [--cascade] <[-]seconds>
 
   *set_chapters       <AudioBook.m4b> <AudioBook.chapters.txt>
@@ -303,6 +347,7 @@ if __name__ == "__main__":
     handlers['rip_cds']            = interactivelyRipCds
     handlers['combine_and_encode'] = combineAndEncode
     handlers['gen_chapter_list']   = genChapterList
+    handlers['play_chapter']       = playChapterSample
 
     # Run the handler
     if not handlers.has_key(subcommand):

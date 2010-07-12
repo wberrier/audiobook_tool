@@ -177,18 +177,6 @@ class ChapterList:
         #self.currentTimeMark += lengthInSecondsTagLib(filename)
         #self.currentTimeMark += lengthInSecondsFFplay(filename)
 
-    def play(self, audio_file, numSeconds, chapterIndex, offset=0.0):
-        """Easily play at a spot in a chapter to assist in verifying all chapter marks"""
-        # is mplayer accurate when it comes to seeking? (ie: does it match seeking with chapters with Apple's software?)
-        #  -> doing some rough checks, it appears to match quicktime on windows
-
-        #  Documentation says it only seeks to second boundaries, but seeking to fractional seconds works
-        print "Playing chapter %d (%s)" % (chapterIndex, self.getChapter(chapterIndex).name)
-        #runOrDie("mplayer -ss %.3f -endpos %.3f '%s'" % (self.getChapter(chapterIndex).timeMark + offset, numSeconds, audio_file))
-
-        # ffplay method
-        runOrDie("ffplay -ss %.3f %s" % (self.getChapter(chapterIndex).timeMark + offset, audio_file))
-
     def adjustChapterTimeMark(self, chapterIndex, adjustNumSeconds, cascade=False):
         """Easily adjust chapter markings, optionally adjusting each successive chapter
         adjustNumSeconds can be a fractional positive or negative
@@ -383,15 +371,18 @@ def combineAndEncode(args):
     return 0
 
 def playChapterSample(args):
+    """Easily play at a spot in a chapter to assist in verifying all chapter marks"""
 
     # Get optional offset
     offset = 0.0
     if len(args) == 5:
-        offset = args[4]
+        offset = float(args[4])
         args.pop()
 
     try:
         (chapter_txt, audio_file, seconds, chapter_index) = args
+        seconds = float(seconds)
+        chapter_index = int(chapter_index)
     except:
         usage()
         sys.exit(1)
@@ -399,9 +390,17 @@ def playChapterSample(args):
     exitIfMissing(chapter_txt)
     exitIfMissing(audio_file)
 
-    cl = ChapterList(chapter_txt)
+    chapter = ChapterList(chapter_txt).getChapter(chapter_index)
 
-    cl.play(audio_file, float(seconds), int(chapter_index), float(offset))
+    # is mplayer accurate when it comes to seeking? (ie: does it match seeking with chapters with Apple's software?)
+    #  -> doing some rough checks, it appears to match quicktime on windows
+
+    #  Documentation says it only seeks to second boundaries, but seeking to fractional seconds works
+    print "Playing chapter %d (%s)" % (chapter_index, chapter.name)
+
+    # Different methods to play the file
+    runOrDie("mplayer -ss %.3f -endpos %.3f '%s'" % (chapter.timeMark + offset, seconds, audio_file))
+    #runOrDie("ffplay -ss %.3f %s" % (chapter.timeMark + offset, audio_file)) # Doesn't support only playing for a number of seconds
 
     return 0
 

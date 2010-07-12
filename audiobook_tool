@@ -437,7 +437,7 @@ class ChapterList:
 
 # This needs to be run in it's own temporary directory, otherwise it really clouds things up.
 
-def interactivelyRipCds(output):
+def interactivelyRipCds(output, cd_device):
 
     if not os.path.exists(output):
         os.mkdir(output)
@@ -470,7 +470,7 @@ def interactivelyRipCds(output):
                 if poll_count > 30:
                     print "Error: Could not find audio disc"
                     sys.exit(1)
-                ret = os.system("cdparanoia -Q 2>/dev/null")
+                ret = os.system("cdparanoia -Q %s 2>/dev/null" % (shellQuote(cd_device) if cd_device else ""))
                 time.sleep(1)
                 poll_count += 1
 
@@ -480,8 +480,8 @@ def interactivelyRipCds(output):
             # Rip the whole disc to a wav file
             # TODO: rip each track individually for chapter support
             # TODO: look up cd in cddb and name output file accordingly
-            runOrDie("cdparanoia --output-wav 1- %s" % (shellQuote(tmp_output)))
-            runOrDie("eject")
+            runOrDie("cdparanoia %s --output-wav 1- %s" % ((shellQuote(cd_device) if cd_device else ""), shellQuote(tmp_output)))
+            runOrDie("eject %s" % (shellQuote(cd_device) if cd_device else ""))
 
         count += 1
 
@@ -517,6 +517,15 @@ def buildFilesString(files):
     for f in files:
         ret += " %s" % shellQuote(f)
     return ret
+
+def getCDDevice(args):
+    cd_device = None
+    opts, remaining_args = getopt.gnu_getopt(args, "", [ "cd_device=" ])
+    for option, value in opts:
+        if option == "--cd_device":
+            cd_device = value
+    args = remaining_args
+    return (cd_device, args)
 
 # Combines a bunch of audio files to a single mp3, m4b, or ogg audiobook
 #  Supports any audio files supported by ffmpeg
@@ -723,7 +732,7 @@ def usage():
 
  Sub commands:
 
-  rip_cds             <output dir>
+  rip_cds             <output dir> [--cd_device="device"]
   combine_and_encode  <AudioBook.[mp3|m4b|ogg]> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo <float ratio>]
 
   gen_chapter_list    <AudioBook.chapters.txt> <audio files> [--tempo <float ratio>]
@@ -758,13 +767,14 @@ if __name__ == "__main__":
     # Parse and handle each of the sub-commands
     #  TODO: more elegant way to parse all of this?
     if 'rip_cds' == subcommand:
+        (cd_device, subcommand_args) = getCDDevice(subcommand_args)
         try:
             output = subcommand_args[0]
         except:
             usage()
             sys.exit(1)
 
-        interactivelyRipCds(output)
+        interactivelyRipCds(output, cd_device)
 
     elif 'combine_and_encode' == subcommand:
 

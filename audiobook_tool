@@ -10,6 +10,8 @@ output_rate="22050"
 output_channels="1"
 
 # ffmpeg profiles
+#  This program is focused on m4b,
+#   but you can use it to encode to mp3/ogg and/or other ffmpeg codecs
 ffmpeg_output_profiles = {
         '.mp3': { 'codec': 'libmp3lame', 'format': 'mp3' },
         '.m4b': { 'codec': 'libfaac',    'format': 'mp4' },
@@ -23,6 +25,7 @@ import os
 import readline
 import re
 import time
+import shutil
 
 import tagpy
 import commands
@@ -68,6 +71,11 @@ def askQuestion(question):
     answer=raw_input()
     print "answer='%s'" % answer
     return answer
+
+def exitIfMissing(filename):
+    if not os.path.exists(filename):
+        print "File does not exist: " + filename
+        sys.exit(1)
 
 class Chapter:
     def __init__(self, timeMark, name):
@@ -280,6 +288,10 @@ def combineAndEncode(args):
         usage()
         sys.exit(1)
 
+    exitIfMissing(output)
+    for f in in_files:
+        exitIfMissing(f)
+
     # Get output file extension
     output_extension = os.path.splitext(output)[1]
 
@@ -310,6 +322,9 @@ def playChapterSample(args):
         usage()
         sys.exit(1)
 
+    exitIfMissing(chapter_txt)
+    exitIfMissing(audio_file)
+
     cl = ChapterList(chapter_txt)
 
     cl.play(audio_file, seconds, chapter_index)
@@ -330,11 +345,76 @@ def adjustChapter(args):
         usage()
         sys.exit(1)
 
+    exitIfMissing(chapter_txt)
+
     cl = ChapterList(chapter_txt)
 
     cl.adjustChapterTimeMark(chapter_index, seconds, cascade)
 
     cl.toFile(chapter_txt)
+
+    return 0
+
+def setChapters(args):
+
+    try:
+        (audio_file, chapter_txt) = args
+    except:
+        usage()
+        sys.exit(1)
+
+    exitIfMissing(chapter_txt)
+    exitIfMissing(audio_file)
+
+    # Remove all chapters
+    runOrDie("mp4chaps --remove '%s'" % audio_file)
+
+    # Put correct chapter file in place if needs be, and clean up afterwards
+    #  (TODO: if mp4v2 every gets python bindings, we won't have to do this kind of work around)
+    tool_expected_chapter_file = output_extension = os.path.splitext(audio_file)[0] + ".chapters.txt"
+    cleanup = False
+    if tool_expected_chapter_file != chapter_txt:
+        shutil.copyfile(chapter_txt, tool_expected_chapter_file)
+        cleanup = True
+
+    # Inject chapters
+    #  What does -z (optimize) do?
+    runOrDie("mp4chaps --import '%s'" % (audio_file))
+
+    if cleanup:
+        os.unlink(tool_expected_chapter_file)
+
+    return 0
+
+def setMetaData(args):
+
+    try:
+        (audio_file, author, title) = args
+    except:
+        usage()
+        sys.exit(1)
+
+    exitIfMissing(audio_file)
+
+    # Set author and title (TODO: more info?)
+    runOrDie("mp4tags -artist '%s' -song '%s' '%s'" % (author, title, audio_file))
+
+    return 0
+
+def setCoverArt(args):
+
+    try:
+        (audio_file, image_file) = args
+    except:
+        usage()
+        sys.exit(1)
+
+    exitIfMissing(audio_file)
+    exitIfMissing(image_file)
+
+    # Set/Replace Coverart
+    runOrDie("mp4art --remove '%s'" % (audio_file))
+    runOrDie("mp4art --add '%s' '%s'" % (image_file, audio_file))
 
     return 0
 
@@ -351,11 +431,10 @@ def usage():
   play_chapter        <AudioBook.chapters.txt> <AudioBook.m4b> <seconds> <chapter index>
   adjust_chapter      <AudioBook.chapters.txt> <chapter index> [--cascade] <[-]seconds>
 
-  *set_chapters       <AudioBook.m4b> <AudioBook.chapters.txt>
-  *set_metadata       <AudioBook.m4b> <Author> <Title>
-  *set_coverart       <AudioBook.m4b> <coverart image>
+  set_chapters        <AudioBook.m4b> <AudioBook.chapters.txt>
+  set_metadata        <AudioBook.m4b> <Author> <Title>
+  set_coverart        <AudioBook.m4b> <coverart image>
 
-  * - Not Finished yet
 """
     print usage_text
 
@@ -376,6 +455,9 @@ if __name__ == "__main__":
     handlers['gen_chapter_list']   = genChapterList
     handlers['play_chapter']       = playChapterSample
     handlers['adjust_chapter']     = adjustChapter
+    handlers['set_chapters']       = setChapters
+    handlers['set_metadata']       = setMetaData
+    handlers['set_coverart']       = setCoverArt
 
     # Run the handler
     if not handlers.has_key(subcommand):

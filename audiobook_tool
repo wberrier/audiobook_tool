@@ -44,20 +44,32 @@ def lengthInSecondsTagLib(file):
     #print "Sample rate: " + str(f.audioProperties().sampleRate)
     return float(seconds)
 
+mplayer_duration_re = re.compile("ID_LENGTH=(.*)")
 def lengthInSecondsMplayer(file):
     # mplayer method
 
     # This probably reports in milliseconds, since it appears to just get the length
     # Hacky, yes... but it appears gives us milliseconds
-    status, output = commands.getstatusoutput("mplayer -vo null -ao null -identify -frames 0 '%s' | grep ID_LENGTH" % file)
+    #  -> Actually it doesn't seem to give milliseconds
+    status, output = commands.getstatusoutput("mplayer -vo null -ao null -identify -frames 0 '%s'" % file)
 
-    # Grab everything after the equals
-    seconds = output.split('=')[1]
+    (seconds,) = mplayer_duration_re.search(output, re.MULTILINE).groups()
 
     # str->float
     return float(seconds)
 
-# TODO: looks like ffplay shows fractions of a second, where the above two methods are whole seconds... hrm...
+ffplay_duration_re = re.compile("Duration: (\d\d):(\d\d):(\d\d).(\d\d),")
+def lengthInSecondsFFplay(file):
+    """Get the length of a file, based on ffplay.  Hundredths of a second accuracy.  (more precision than mplayer and taglib)"""
+    # -> Even though it gives more precision, it doesn't seem to be accurate :(
+
+    status, output = commands.getstatusoutput("ffplay -stats -vn -an '%s' " % file)
+
+    (hours, minutes, seconds, decimal) = ffplay_duration_re.search(output, re.MULTILINE).groups()
+
+    total_seconds = totalSeconds(hours, minutes, seconds, decimal)
+
+    return total_seconds
 
 def runOrDie(command):
     print "Running: " + command
@@ -97,16 +109,18 @@ class Chapter:
 
         return "%02d:%02d:%02d.%s %s" % (hours, minutes, seconds, milliseconds_string, self.name)
 
+def totalSeconds(hours, minutes, seconds, decimal):
+
+    total_seconds = 0.0
+    total_seconds += float(hours) * float(3600) + float(minutes) * 60 + float(seconds) + float("0.%s" % decimal)
+
+    return total_seconds
+
 chapter_line_re = re.compile("(\d\d):(\d\d):(\d\d).(\d\d\d) (.*)")
 
 def parseChapterLine(line):
     (hours, minutes, seconds, milliseconds, chapter_name) = chapter_line_re.search(line).groups()
-    total_seconds = 0.0
-    total_seconds += float(hours) * float(3600) + float(minutes) * 60 + float(seconds)
-    milli_num = 0.0
-    milli_num += float(milliseconds)
-    milli_num /= 1000
-    total_seconds += milli_num
+    total_seconds = totalSeconds(hours, minutes, seconds, milliseconds)
 
     return (total_seconds, chapter_name)
 
@@ -135,14 +149,18 @@ class ChapterList:
         # Update the cumalative time
         # These give different results!  Interesting...  Wonder which one is accurate?
         #  We'll probably need manual adjustment, so maybe it doesn't matter
-        #self.currentTimeMark += lengthInSecondsMplayer(filename)
-        self.currentTimeMark += lengthInSecondsTagLib(filename)
+        self.currentTimeMark += lengthInSecondsMplayer(filename)
+        #self.currentTimeMark += lengthInSecondsTagLib(filename)
+        #self.currentTimeMark += lengthInSecondsFFplay(filename)
 
     def play(self, audio_file, numSeconds, chapterIndex, offset=0.0):
         """Easily play at a spot in a chapter to assist in verifying all chapter marks"""
         # TODO: is mplayer accurate when it comes to seeking? (ie: does it match seeking with chapters with Apple's software?)
         #  Documentation says it only seeks to second boundaries, but seeking to fractional seconds works
-        runOrDie("mplayer -ss %.3f -endpos %s %s" % (self.chapters[int(chapterIndex) - 1].timeMark + offset, numSeconds, audio_file))
+        runOrDie("mplayer -ss %.3f -endpos %s '%s'" % (self.chapters[int(chapterIndex) - 1].timeMark + offset, numSeconds, audio_file))
+
+        # ffplay method
+        #runOrDie("ffplay -ss %.3f %s" % (self.chapters[int(chapterIndex) - 1].timeMark + offset, audio_file))
 
     def adjustChapterTimeMark(self, chapterIndex, adjustNumSeconds, cascade=False):
         """Easily adjust chapter markings, optionally adjusting each successive chapter

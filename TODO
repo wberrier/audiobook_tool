@@ -16,4 +16,4 @@
 - be able to submit tracks from chapter list to cddb?
 
 - interactive detection of chapters via silence detection (ie: 3 seconds)
- (I guess mp3cut does something similar?)
+  (cutmp3 does something similar)

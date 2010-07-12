@@ -47,6 +47,9 @@ import re
 import time
 import shutil
 import getopt
+import CDDB
+import DiscID
+import glob
 
 import commands
 
@@ -444,45 +447,88 @@ def interactivelyRipCds(output, cd_device):
     os.chdir(output)
 
     count = 1
+    chapter_count = 1
+
+    new_files = glob.glob('track[0-9][0-9].cdda.wav')
+    if new_files:
+        answer = askQuestion("File(s) %s exist(s).  Delete or Quit? [dq]" % ", ".join(new_files))
+
+        if re.search("d", answer, re.IGNORECASE):
+            for new_file in new_files:
+                os.unlink(new_file)
+        else:
+            sys.exit(1)
 
     while True:
+        askQuestion("Insert disc %d and press <ENTER> when ready" % count)
 
-        # Use 2 digits, even for numbers less than 10 so sorting order is correct
-        tmp_output = "%s-%.2d.wav" % (output, count)
+        # Don't start until we know there's a disc in the drive
+        poll_count = 0
+        ret = 1
+        while ret != 0:
+            print "Looking for disc..."
+            if poll_count > 30:
+                print "Error: Could not find audio disc"
+                sys.exit(1)
+            ret = os.system("cdparanoia -Q %s 2>/dev/null" % (("-d %s" % shellQuote(cd_device)) if cd_device else ""))
+            time.sleep(1)
+            poll_count += 1
 
-        run_command = True
-        if os.path.exists(tmp_output):
-            answer = askQuestion("%s exists.  Overwrite or Skip? [os]" % tmp_output)
+        # sleep for another 10 seconds to wait for auto insert access to calm down
+        time.sleep(10)
 
-            if re.search("o", answer, re.IGNORECASE):
-                run_command = True
+        # Rip the whole disc to a wav file
+        runOrDie("cdparanoia %s --output-wav -B" % (("-d %s" % shellQuote(cd_device)) if cd_device else ""))
+
+        # Query the disc for disc info, and use the info to query FreeDB.org
+        cd = DiscID.open(cd_device)
+        disc_id = DiscID.disc_id(cd)
+        (query_status, query_info) = CDDB.query(disc_id, client_name='audiobook_tool',
+                client_version=1.0, host='localhost', user='audiobook_tool_user')
+        if query_status in [210, 211]:
+            print "Multiple discs found in CDDB:"
+            for i in range(0, len(query_info)):
+                print "%d: %s" % (i + 1, query_info[i]['title'])
+            answer = askQuestion("Which select which disc? (blank for none) [1-%d]" % len(query_info))
+            i = int(answer) - 1
+            (cat, id) = [query_info[i]['category'], query_info[i]['disc_id']]
+        elif query_status == 200:
+            (cat,id) = [query_info['category'], query_info['disc_id']]
+
+        (read_status, read_info) = CDDB.read(cat, id, client_name='audiobook_tool', client_version=1.0,
+                host='localhost', user='audiobook_tool_user')
+
+        # find the files produced by ripping the disc
+        new_files = glob.glob('track[0-9][0-9].cdda.wav')
+        new_files.sort()
+
+        track_number_re = re.compile("^track(\d+)\.cdda\.wav$")
+
+        for track in new_files:
+            try:
+                (i,) = track_number_re.search(track).groups()
+            except(AttributeError):
+                #Shouldn't ever get this
+                continue
+            i = int(i, 10)
+            if (query_status in [200,210,211] and read_status == 210):
+                name = read_info['TTITLE%d' % (i - 1)]
             else:
-                run_command = False
+                name = "Chapter %d" % chapter_count
+            tmp_output = '%s-%.2d-%.2d-%s.wav' % (output, count, i, name)
+            print "Writing file %s" % tmp_output
+            if os.path.exists(tmp_output):
+                answer = askQuestion("%s exists.  Overwrite or Quit? [oq]" % tmp_output)
 
-        if run_command:
-            askQuestion("Insert disc %d and press <ENTER> when ready" % count)
+                if re.search("o", answer, re.IGNORECASE):
+                    os.rename(track, tmp_output)
+                else:
+                    os.unlink(track)
+            else:
+                os.rename(track, tmp_output)
+            chapter_count += 1
 
-            # Don't start until we know there's a disc in the drive
-            poll_count = 0
-            ret = 1
-            while ret != 0:
-                print "Looking for disc..."
-                if poll_count > 30:
-                    print "Error: Could not find audio disc"
-                    sys.exit(1)
-                ret = os.system("cdparanoia -Q %s 2>/dev/null" % (shellQuote(cd_device) if cd_device else ""))
-                time.sleep(1)
-                poll_count += 1
-
-            # sleep for another 10 seconds to wait for auto insert access to calm down
-            time.sleep(10)
-
-            # Rip the whole disc to a wav file
-            # TODO: rip each track individually for chapter support
-            # TODO: look up cd in cddb and name output file accordingly
-            runOrDie("cdparanoia %s --output-wav 1- %s" % ((shellQuote(cd_device) if cd_device else ""), shellQuote(tmp_output)))
-            runOrDie("eject %s" % (shellQuote(cd_device) if cd_device else ""))
-
+        runOrDie("eject %s" % (shellQuote(cd_device) if cd_device else ""))
         count += 1
 
         if re.search("(n|no)", askQuestion("Continue with disk %d? [yn]" % count), re.IGNORECASE):

@@ -154,6 +154,13 @@ class ChapterList:
                 self.addChapter(seconds, name)
             fd.close()
 
+    def getChapter(self, chapterIndex):
+        if not (chapterIndex > 0 and chapterIndex <= len(self.chapters)):
+            print "Invalid chapter: %d" % chapterIndex
+            sys.exit(1)
+
+        return self.chapters[chapterIndex - 1]
+
     def addChapter(self, seconds, chapter_name):
         self.chapters.append(Chapter(seconds, chapter_name))
         self.currentTimeMark = seconds
@@ -175,34 +182,25 @@ class ChapterList:
         # is mplayer accurate when it comes to seeking? (ie: does it match seeking with chapters with Apple's software?)
         #  -> doing some rough checks, it appears to match quicktime on windows
 
-        if not self.validChapter(chapterIndex):
-            print "Invalid chapter: %d" % chapterIndex
-            sys.exit(1)
-
         #  Documentation says it only seeks to second boundaries, but seeking to fractional seconds works
-        runOrDie("mplayer -ss %.3f -endpos %.3f '%s'" % (self.chapters[chapterIndex - 1].timeMark + offset, numSeconds, audio_file))
+        print "Playing chapter %d (%s)" % (chapterIndex, self.getChapter(chapterIndex).name)
+        #runOrDie("mplayer -ss %.3f -endpos %.3f '%s'" % (self.getChapter(chapterIndex).timeMark + offset, numSeconds, audio_file))
 
         # ffplay method
-        #runOrDie("ffplay -ss %.3f %s" % (self.chapters[chapterIndex - 1].timeMark + offset, audio_file))
+        runOrDie("ffplay -ss %.3f %s" % (self.getChapter(chapterIndex).timeMark + offset, audio_file))
 
     def adjustChapterTimeMark(self, chapterIndex, adjustNumSeconds, cascade=False):
         """Easily adjust chapter markings, optionally adjusting each successive chapter
         adjustNumSeconds can be a fractional positive or negative
         """
 
-        if not self.validChapter(chapterIndex):
-            print "Invalid chapter: %d" % chapterIndex
-            sys.exit(1)
-
-        for ch in self.chapters[chapterIndex - 1:]:
-            ch.timeMark += adjustNumSeconds
+        # For all of the chapters (+1 for the range function)
+        for i in range(chapterIndex, len(self.chapters) + 1):
+            self.getChapter(i).timeMark += adjustNumSeconds
 
             # Only do one chapter, or do all the rest?
             if not cascade:
                 break
-
-    def validChapter(self, chapterIndex):
-        return chapterIndex > 0 and chapterIndex <= len(self.chapters)
 
     def toString(self):
         """Get Whole chapter listing in mp4chap import/export format"""

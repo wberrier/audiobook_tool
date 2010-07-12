@@ -107,6 +107,9 @@ while True:
     if re.search("(n|no)", askQuestion("Continue with disk %d? [yn]" % count), re.IGNORECASE):
         break
 
+# TODO: do we need to split aac into multiple files?  (filesize limitation for apple software? ugh...)
+#  we should be able to programatically determine the max filesize
+
 # Use ffmpeg (easier to switch formats and options) (although, files produced with it are a little bit different concerning stereo/mono)
 runOrDie("(cat *.raw) | ffmpeg -y -f %s -ar %s -ac %s -i /dev/stdin -acodec %s -ar %s -ab %s -ac %s -f %s '%s.%s'" % (input_format, input_rate, input_channels, output_codec, output_rate, output_bitrate, output_channels, output_format, output, output_extension))
 

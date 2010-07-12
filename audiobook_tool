@@ -5,35 +5,6 @@
 # Collection of common functions and tasks when authoring audiobook files
 # See the usage for more documentation
 
-# TODO: normalize audio?
-
-"""
-# TODO: document typical use cases
-
-1. Combining a whole bunch of mp3 (or any format that ffmpeg supports) to a single
-   .m4b file in one swoop.
-
-2. Doing each step manually so you can adjust the chapter list. (Note, you can also
-   do use case #1, and then extract chapter list, modify it, and then set it again)
-
-3. Ripping an audiobook from cds only differs in that you create the input files
-   (wav files) first, and then continue with the other use cases
-
-"""
-
-# TODO: Add a verbose option, (ie: the user probably doesn't want to see the ffmpeg
-#  input output)
-
-# TODO: implement "gen_chapter_list_from_cddbid".
-#  it would fetch track info from the cddb and spit out the chapters
-
-# TODO: query cddb or musicbrainz when ripping cds to get track names
-
-# TODO: be able to submit tracks from chapter list to cddb?
-
-# TODO: interactive detection of chapters via silence detection (ie: 3 seconds)
-#       (I guess mp3cut does something similar?)
-
 ####################################################
 # ffmpeg output settings for combine_and_encode
 output_bitrate="32000"

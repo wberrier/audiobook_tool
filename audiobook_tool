@@ -230,6 +230,19 @@ class Chapter:
         obj = cls(total_seconds, chapter_name)
         return obj
 
+    @classmethod
+    def fromExportedLine(cls, line):
+        """
+        Factory method for creating a chapter based on the exported text format from mp4chap
+        Chapter #030 - 19:00:40.111 - "Chapter 30"
+        """
+
+        (hours, minutes, seconds, milliseconds, chapter_name) = mp4chap_exported_chapter_line_re.search(line).groups()
+        total_seconds = totalSeconds(hours, minutes, seconds, milliseconds)
+
+        obj = cls(total_seconds, chapter_name)
+        return obj
+
     def toString(self):
         # Takes a decimal
 
@@ -254,6 +267,7 @@ def totalSeconds(hours, minutes, seconds, decimal):
     return total_seconds
 
 chapter_line_re = re.compile("(\d\d):(\d\d):(\d\d).(\d\d\d) (.*)")
+mp4chap_exported_chapter_line_re = re.compile("\tChapter #\d\d\d - (\d\d):(\d\d):(\d\d).(\d\d\d) - \"(.*)\"")
 
 class ChapterList:
     def __init__(self):
@@ -270,6 +284,29 @@ class ChapterList:
         for line in fd.readlines():
             obj.addChapter(Chapter.fromLine(line))
         fd.close()
+
+        return obj
+
+    @classmethod
+    def fromM4bFile(cls, filename):
+        """Export chapters via mp4chaps and format to the expected import format"""
+
+        obj = cls()
+
+        no_chapters_re = re.compile("File .* does not contain chapters of type QuickTime and Nero")
+
+        (status, output) = commands.getstatusoutput("mp4chaps --list '%s'" % filename)
+
+        # Check for empty chapter
+        if no_chapters_re.search(output):
+            return obj
+
+        count = -1
+        for line in output.split("\n"):
+            count += 1
+            if count == 0:
+                continue
+            obj.addChapter(Chapter.fromExportedLine(line))
 
         return obj
 
@@ -589,6 +626,21 @@ def setChapters(args):
 
     return 0
 
+def getChapters(args):
+    try:
+        (audio_file, chapter_txt) = args
+    except:
+        usage()
+        sys.exit(1)
+
+    exitIfMissing(audio_file)
+
+    cl = ChapterList.fromM4bFile(audio_file)
+
+    cl.toFile(chapter_txt)
+
+    return 0
+
 def setMetaData(args):
 
     try:
@@ -653,6 +705,7 @@ def usage():
   adjust_chapter      <AudioBook.chapters.txt> <chapter index> [--cascade] <[-]seconds>
 
   set_chapters        <AudioBook.m4b> <AudioBook.chapters.txt>
+  get_chapters        <AudioBook.m4b> <AudioBook.chapters.txt>
   set_metadata        <AudioBook.m4b> <Author> <Title>
   set_coverart        <AudioBook.m4b> <coverart image>
   optimize            <AudioBook.m4b>
@@ -677,6 +730,7 @@ if __name__ == "__main__":
     handlers['gen_chapter_list']   = genChapterList
     handlers['play_chapter']       = playChapterSample
     handlers['adjust_chapter']     = adjustChapter
+    handlers['get_chapters']       = getChapters
     handlers['set_chapters']       = setChapters
     handlers['set_metadata']       = setMetaData
     handlers['set_coverart']       = setCoverArt

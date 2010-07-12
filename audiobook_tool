@@ -21,6 +21,9 @@
 
 """
 
+# TODO: Add a verbose option, (ie: the user probably doesn't want to see the ffmpeg
+#  input output)
+
 ####################################################
 # ffmpeg output settings for combine_and_encode
 output_bitrate="32000"

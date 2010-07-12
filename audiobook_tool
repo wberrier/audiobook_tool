@@ -64,6 +64,16 @@ def lengthInSecondsTagLib(file):
     #print "Sample rate: " + str(f.audioProperties().sampleRate)
     return float(seconds)
 
+def convertToWavMplayer(file):
+    """Returns new wav file, which the user is responsible for cleaning up"""
+
+    wavFile = file + ".wav"
+    # Convert it if we haven't done so already
+    if not os.path.exists(wavFile):
+        status, output = commands.getstatusoutput("mplayer '%s' -ao 'pcm:file=%s'" % (file, wavFile))
+
+    return wavFile
+
 mplayer_duration_re = re.compile("ID_LENGTH=(.*)")
 def lengthInSecondsMplayer(file):
     """Will convert non-wav files to wav to get a more accurate reading, but still not as accurate as what ffmpeg reports"""
@@ -74,11 +84,7 @@ def lengthInSecondsMplayer(file):
         convertToWav = True
 
     if convertToWav:
-        wavFile = file + ".wav"
-        # Convert it if we haven't done so already
-        if not os.path.exists(wavFile):
-            status, output = commands.getstatusoutput("mplayer '%s' -ao 'pcm:file=%s'" % (file, wavFile))
-        file = wavFile
+        file = convertToWavMplayer(file)
 
     # This probably reports in milliseconds, since it appears to just get the length
     # Hacky, yes... but it appears gives us milliseconds
@@ -92,17 +98,27 @@ def lengthInSecondsMplayer(file):
 
     if convertToWav:
         # Clean up... (much faster to clean up each file than to leave them around (yay kernel disk cache))
-        os.unlink(wavFile)
+        os.unlink(file)
 
     # str->float
     return float(seconds)
+
+def convertToWavFFmpeg(file):
+    """Returns new wav file, which the user is responsible for cleaning up"""
+
+    wavFile = file + ".wav"
+    # Convert it if we haven't done so already
+    if not os.path.exists(wavFile):
+        status, output = commands.getstatusoutput("ffmpeg -y -i '%s' -f wav '%s' " % (file, wavFile))
+
+    return wavFile
 
 ffplay_duration_re = re.compile("Duration: (\d\d):(\d\d):(\d\d).(\d\d),")
 def lengthInSecondsFFplay(file):
     """Get the length of a file, based on ffplay.  Hundredths of a second accuracy.  (more precision than mplayer and taglib)
        Even though it gives more precision, it doesn't make the chapter marks any more accurate (if anything, they are worse!)
 
-       Converting mp3s to a .wav file is _VERY_ accurate.  Much more accurate than doing the equivalent with mplayer.
+       Converting mp3s to a .wav file is pretty accurate (hundredths).  Much more accurate than doing the equivalent with mplayer.
 
        For audiobooks from cds, we don't do an unnecessary conversion here, since those will be wav files
     """
@@ -112,11 +128,7 @@ def lengthInSecondsFFplay(file):
         convertToWav = True
 
     if convertToWav:
-        wavFile = file + ".wav"
-        # Convert it if we haven't done so already
-        if not os.path.exists(wavFile):
-            status, output = commands.getstatusoutput("ffmpeg -y -i '%s' -f wav '%s' " % (file, wavFile))
-        file = wavFile
+        file = convertToWavFFmpeg(file)
 
     status, output = commands.getstatusoutput("ffplay -stats -vn -an '%s' " % file)
 
@@ -129,10 +141,56 @@ def lengthInSecondsFFplay(file):
 
     if convertToWav:
         # Clean up... (much faster to clean up each file than to leave them around (yay kernel disk cache))
-        os.unlink(wavFile)
+        os.unlink(file)
 
     #  Tried rounding this... but it still gave different results than mplayer
     return float(total_seconds)
+
+# Interesting bits:
+#Sample Rate    : 22050
+#Duration       : 00:04:51.92 = 6436800 samples ~ 21893.9 CDDA sectors
+#soxi_duration_re = re.compile("Sample Rate\s+: (\d+).*Duration\s+: \d\d:\d\d:\d\d\.\d\d = (\d+) samples")
+# Fine, break into two regexes, since I can't seem to match both in one pass (even with re.DOTALL)
+soxi_sample_rate_re = re.compile("Sample Rate\s+: (\d+)")
+soxi_duration_re = re.compile("Duration\s+: \d\d:\d\d:\d\d\.\d\d = (\d+) samples")
+def lengthInSecondsSoxi(file):
+    """
+    First, convert the file to a wav file, and then, using the sample rate, get the duration to the thousandths
+
+    This method is the most accurate.  Otherwise, with the ffplay method (even when converting to wav!) with a book
+    with 240 chapters, a full second discrepancy crept in.
+
+    Note: soxi does report getting the number of samples from .mp3 and other various non-wav formats, but it doesn't
+    appeart to be quite as accurate.  Even though converting to wav is slow and cumbersome, it still seems to be the
+    most accurate.
+
+    Using ffmpeg to both convert to wav and to encode could also be contributing to the accuracy.  Different results
+    are gotten when using mplayer to convert to a wav file (header info, or actual file output? Not sure...)
+    """
+
+    convertToWav = False
+    if os.path.splitext(file)[1] != ".wav":
+        convertToWav = True
+
+    if convertToWav:
+        file = convertToWavFFmpeg(file)
+        #file = convertToWavMplayer(file)
+
+    status, output = commands.getstatusoutput("soxi '%s' " % file)
+
+    try:
+        (sample_rate,) = soxi_sample_rate_re.search(output).groups()
+        (num_samples,) = soxi_duration_re.search(output).groups()
+    except:
+        raise LengthRetrievalError("Failed to parse: " + output)
+
+    seconds = float(num_samples) / float(sample_rate)
+
+    if convertToWav:
+        # Clean up... (much faster to clean up each file than to leave them around (yay kernel disk cache))
+        os.unlink(file)
+
+    return float(seconds)
 
 # TODO: manually parse wav header . we'd also have to know the specs from the wav header... ugh
 #   but still, ffmpeg method only gives hundredths, where having thousandsth would help
@@ -179,7 +237,8 @@ class Chapter:
         minutes = (total_seconds - (hours * 3600)) / 60
         seconds = (total_seconds - (hours * 3600) - (minutes * 60))
 
-        decimal = self.timeMark - total_seconds
+        # Round the decimal to 3 places (since that's all the chapter format accounts for)
+        decimal = round(self.timeMark - total_seconds, 3)
 
         # Get the float to 3 places, and grab everything after the decimal
         milliseconds_string = ("%0.3f" % decimal).split('.')[1]
@@ -235,7 +294,8 @@ class ChapterList:
             #  We'll probably need manual adjustment, so maybe it doesn't matter
             #self.currentTimeMark += lengthInSecondsMplayer(filename)
             #self.currentTimeMark += lengthInSecondsTagLib(filename)
-            self.currentTimeMark += lengthInSecondsFFplay(filename)
+            #self.currentTimeMark += lengthInSecondsFFplay(filename)
+            self.currentTimeMark += lengthInSecondsSoxi(filename)
         except(LengthRetrievalError):
             print "Error reading file: " + filename
             sys.exit(1)

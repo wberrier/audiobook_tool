@@ -27,8 +27,14 @@ import re
 import time
 import shutil
 
-import tagpy
 import commands
+
+try:
+    # Keep tagpy code around for reference, but don't require it
+    import tagpy
+    have_tagpy = True
+except:
+    have_tagpy = False
 
 def lengthInSecondsTagLib(file):
     # Need a way to get the length of a file.  exiftool works,
@@ -38,6 +44,9 @@ def lengthInSecondsTagLib(file):
 
     # Hrm... taglib doesn't give milliseconds... does that matter?
     # Wow, looks like the id3 tag can specify milliseconds, bu the taglib api only reports integers?  Ugh...
+
+    if not have_tagpy:
+        return 0.0
 
     f = tagpy.FileRef(file)
     seconds = f.audioProperties().length
@@ -321,7 +330,6 @@ def combineAndEncode(args):
         usage()
         sys.exit(1)
 
-    exitIfMissing(output)
     for f in in_files:
         exitIfMissing(f)
 
@@ -437,7 +445,8 @@ def setMetaData(args):
     exitIfMissing(audio_file)
 
     # Set author and title (TODO: more info?)
-    runOrDie("mp4tags -artist '%s' -song '%s' '%s'" % (author, title, audio_file))
+    #  Use double quotes so apostraphes can be used in titles
+    runOrDie("mp4tags -artist \"%s\" -song \"%s\" \"%s\"" % (author, title, audio_file))
 
     return 0
 

@@ -667,7 +667,7 @@ def m4bFromFiles(audio_file, author, title, art_file, in_files, ffmpeg_input_for
     """All-in-one method to generate a book once all the necessary information is given."""
 
     # Get the chapter name
-    chapter_txt = os.path.splitext(audio_file)[0] + "chapters.txt"
+    chapter_txt = os.path.splitext(audio_file)[0] + ".chapters.txt"
 
     cl = genChapterList(in_files, chapter_txt)
 

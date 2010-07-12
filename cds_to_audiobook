@@ -15,7 +15,7 @@ output_channels="1"
 # aac
 output_codec="libfaac"
 output_format="mp4"
-output_extension="m4a"
+output_extension="m4b"
 
 ## Mp3
 #output_codec="libmp3lame"
@@ -109,4 +109,8 @@ while True:
 
 # Use ffmpeg (easier to switch formats and options) (although, files produced with it are a little bit different concerning stereo/mono)
 runOrDie("(cat *.raw) | ffmpeg -y -f %s -ar %s -ac %s -i /dev/stdin -acodec %s -ar %s -ab %s -ac %s -f %s '%s.%s'" % (input_format, input_rate, input_channels, output_codec, output_rate, output_bitrate, output_channels, output_format, output, output_extension))
+
+# TODO: add mp4 chapter support to ffmpeg
+
+# TODO: add audiobook marking support to gtkpod (supposedly works for podcasts, but not audiobooks)
 

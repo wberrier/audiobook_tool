@@ -154,7 +154,7 @@ class ChapterList:
 
     def addChapterFromFile(self, filename):
 
-        name = os.path.splitext(os.path.basename(filename))[0]
+        name = os.path.splitext(filename)[0]
         self.chapters.append(Chapter(self.currentTimeMark, name))
 
         # Update the cumalative time

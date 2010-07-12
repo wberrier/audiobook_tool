@@ -27,6 +27,10 @@
 # TODO: implement "gen_chapter_list_from_cddbid".
 #  it would fetch track info from the cddb and spit out the chapters
 
+# TODO: query cddb or musicbrainz when ripping cds to get track names
+
+# TODO: be able to submit tracks from chapter list to cddb?
+
 ####################################################
 # ffmpeg output settings for combine_and_encode
 output_bitrate="32000"
@@ -383,7 +387,21 @@ class ChapterList:
 
     def addChapterFromFile(self, filename, tempo="1.0"):
 
-        name = os.path.splitext(filename)[0]
+        # Try to get the name of the chapter from the title
+        # TODO: also support mp4 files via mp4v2
+        name = ""
+        if have_tagpy:
+            try:
+                name = tagpy.FileRef(filename).tag().title
+                # Encode from unicode to utf-8 so it can be written to file
+                name = name.encode("utf-8")
+            except:
+                print "tagpy: unable to get track title from: " + filename
+
+        # If no track title found, use the filename
+        if len(name) == 0:
+            name = os.path.splitext(filename)[0]
+
         self.chapters.append(Chapter(self.currentTimeMark, name))
 
         try:
@@ -601,7 +619,7 @@ def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
 
     # Different methods to play the file
     #runOrDie("mplayer -ss %.3f '%s'" % (chapter.timeMark + offset, audio_file))
-    runOrDie("ffplay -ss %.3f %s" % (chapter.timeMark + offset, audio_file))
+    runOrDie("ffplay -ss %.3f %s 2>/dev/null" % (chapter.timeMark + offset, audio_file))
 
 
 def adjustChapter(chapter_txt, chapter_index, seconds, cascade):
@@ -674,7 +692,7 @@ def optimizeMp4(audio_file):
     exitIfMissing(audio_file)
 
     # Optimize
-    #  TODO: what does this really do?
+    # -> optimizes mp4 file for http streaming
     runOrDie("mp4file --optimize '%s'" % (audio_file))
 
 

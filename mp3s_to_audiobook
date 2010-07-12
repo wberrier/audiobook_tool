@@ -1,0 +1,74 @@
+#!/usr/bin/env python
+
+# Combines a bunch of mp3 files to a single mp3 or m4b audiofile
+#  There is a lossy conversion, but for an audiobook, oh well...
+
+# TODO: warn user if outputting to m4b file will have over
+#  4 billion samples, or whatever the ipod limitation is... ugh
+
+# ffmpeg settings
+####################################################
+# cd audio input settings
+input_format="s16le"
+#input_rate="44100"  # TODO: How to automatically detect this?  Too bad mpg321 can't resample...
+input_rate="22050"
+input_channels="2"
+
+# output settings
+output_bitrate="32000"
+output_rate="22050"
+output_channels="1"
+
+## aac
+aac_output_codec="libfaac"
+aac_output_format="mp4"
+
+# Mp3
+mp3_output_codec="libmp3lame"
+mp3_output_format="mp3"
+####################################################
+
+import sys
+import os
+
+def runOrDie(command):
+	print "Running: " + command
+	ret = os.system(command)
+	if ret:
+		print command + " failed"
+		sys.exit(1)
+
+def buildFilesString(files):
+	ret = ""
+	for f in files:
+		ret += " '%s'" % f
+	return ret
+
+try:
+	(output) = sys.argv[1]
+	in_files = sys.argv[2:]
+ 
+	# Get file extension
+	output_extension = os.path.splitext(output)[1]
+
+	if output_extension == ".mp3":
+		output_codec = mp3_output_codec
+		output_format = mp3_output_format
+	elif output_extension == ".m4b":
+		output_codec = aac_output_codec
+		output_format = aac_output_format
+	else:
+		print "Unknown file extension: " + output_extension
+		sys.exit(1)
+
+except:
+	print ""
+	print "Usage: mp3s_to_audiobook <outfile> <mp3 input files>"
+	print ""
+	print " Example:  mp3s_to_audiobook AudioBook ../*.mp3"
+	print ""
+	sys.exit(1)
+
+# Do this in one pass instead of going to wav, raw, and then output (no intermediate files)
+runOrDie("mpg321 --stereo --stdout %s | ffmpeg -y -f %s -ar %s -ac %s -i /dev/stdin -acodec %s -ar %s -ab %s -ac %s -f %s '%s'" % (buildFilesString(in_files), input_format, input_rate, input_channels, output_codec, output_rate, output_bitrate, output_channels, output_format, output))
+

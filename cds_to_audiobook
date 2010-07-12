@@ -2,6 +2,8 @@
 
 # This needs to be run in it's own temporary directory, otherwise it really clouds things up.
 
+# ffmpeg settings
+####################################################
 # cd audio input settings
 input_format="s16le"
 input_rate="44100"
@@ -20,7 +22,33 @@ output_extension="m4b"
 ## Mp3
 #output_codec="libmp3lame"
 #output_format="mp3"
-#output_extension="mp3"
+#output_extension="ffmpeg.mp3"
+####################################################
+
+####################################################
+# Lame Settings
+#output_extension="lame.mp3"
+
+lame_input_bits="16"
+lame_input_rate="44.1"
+lame_output_rate="22.05"
+
+# mp3 bitrate
+lame_bitrate="32"
+####################################################
+
+####################################################
+## faac settings
+#output_extension="default_quality.faac.m4b"
+#
+#faac_input_channels="2"
+#faac_input_bits="16"
+#faac_input_rate="44100"
+#faac_output_rate="22050" # Don't think faac can downsample
+#
+## bitrate
+#faac_bitrate="32"
+####################################################
 
 import sys
 import os
@@ -113,7 +141,14 @@ while True:
 # Use ffmpeg (easier to switch formats and options) (although, files produced with it are a little bit different concerning stereo/mono)
 runOrDie("(cat *.raw) | ffmpeg -y -f %s -ar %s -ac %s -i /dev/stdin -acodec %s -ar %s -ab %s -ac %s -f %s '%s.%s'" % (input_format, input_rate, input_channels, output_codec, output_rate, output_bitrate, output_channels, output_format, output, output_extension))
 
-# TODO: add mp4 chapter support to ffmpeg
+# TODO: add mp4 chapter support to ffmpeg.  Maybe it would be better to have this util operate on a preexisting file... ?
 
 # TODO: add audiobook marking support to gtkpod (supposedly works for podcasts, but not audiobooks)
 
+#runOrDie("(cat *.raw) | lame -r -s %s --bitwidth %s --signed --little-endian --resample %s -h -m s -a --abr %s - '%s.%s'" % (lame_input_rate, lame_input_bits, lame_output_rate, lame_bitrate, output, output_extension))
+
+# -q 80 necessary?  Looks like to down sample to 20500 we'd have to run it through a sox pipe
+#  staying with stereo doesn't seem to affect filesize so much... 44.1 is a little bigger, but not significant... hrmm...
+#runOrDie("(cat *.raw) | faac -R %s -B %s -C %s -X -w -b %s -o '%s.%s' -" % (faac_input_rate, faac_input_bits, faac_input_channels, faac_bitrate, output, output_extension))
+
+# TODO: judge between all these formats...  Mainly trying to get rid of the highend hissiness

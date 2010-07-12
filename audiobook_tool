@@ -138,11 +138,11 @@ class ChapterList:
         #self.currentTimeMark += lengthInSecondsMplayer(filename)
         self.currentTimeMark += lengthInSecondsTagLib(filename)
 
-    def play(self, audio_file, numSeconds, chapterIndex):
+    def play(self, audio_file, numSeconds, chapterIndex, offset=0.0):
         """Easily play at a spot in a chapter to assist in verifying all chapter marks"""
-        # TODO: is mplayer accurate when it comes to seeking?
-        #  Plus, we can only seek to second boundaries... hrm...
-        os.system("mplayer -ss %d -endpos %s %s" % (self.chapters[int(chapterIndex) - 1].timeMark, numSeconds, audio_file))
+        # TODO: is mplayer accurate when it comes to seeking? (ie: does it match seeking with chapters with Apple's software?)
+        #  Documentation says it only seeks to second boundaries, but seeking to fractional seconds works
+        runOrDie("mplayer -ss %.3f -endpos %s %s" % (self.chapters[int(chapterIndex) - 1].timeMark + offset, numSeconds, audio_file))
 
     def adjustChapterTimeMark(self, chapterIndex, adjustNumSeconds, cascade=False):
         """Easily adjust chapter markings, optionally adjusting each successive chapter
@@ -316,6 +316,13 @@ def combineAndEncode(args):
     return 0
 
 def playChapterSample(args):
+
+    # Get optional offset
+    offset = 0.0
+    if len(args) == 5:
+        offset = float(args[4])
+        args.pop()
+
     try:
         (chapter_txt, audio_file, seconds, chapter_index) = args
     except:
@@ -327,7 +334,7 @@ def playChapterSample(args):
 
     cl = ChapterList(chapter_txt)
 
-    cl.play(audio_file, seconds, chapter_index)
+    cl.play(audio_file, seconds, chapter_index, offset)
 
     return 0
 
@@ -443,7 +450,7 @@ def usage():
   combine_and_encode  <AudioBook.[mp3|m4b|ogg]> <ffmpeg recognizable audio files>
 
   gen_chapter_list    <AudioBook.chapters.txt> <audio files>
-  play_chapter        <AudioBook.chapters.txt> <AudioBook.m4b> <seconds> <chapter index>
+  play_chapter        <AudioBook.chapters.txt> <AudioBook.m4b> <seconds> <chapter index> [offset]
   adjust_chapter      <AudioBook.chapters.txt> <chapter index> [--cascade] <[-]seconds>
 
   set_chapters        <AudioBook.m4b> <AudioBook.chapters.txt>

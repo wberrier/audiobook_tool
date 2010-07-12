@@ -545,7 +545,7 @@ def combineAndEncode(output, in_files, ffmpeg_input_options=""):
     intermediate_format_options = "-ar %s -ac %s -f s16le" % (output_rate, output_channels)
     # TODO: gather length by converting to a wav, getting the size via sox, piping with ffmpeg, and then cleaning up the wav file?
     #  that "could" be faster overall, even though it would slow down this step (writing each wav file to disc)
-    player_command = "for i in %s ; do ffmpeg -y %s /dev/stdout %s -i \"$i\" || { echo '' >&2; echo \"****** Failed to play $i ******\" >&2 ; echo '' >&2 ; touch %s ; exit 1 ; } ; done""" % (buildFilesString(in_files), intermediate_format_options, ffmpeg_input_options, error_filename)
+    player_command = "for i in %s ; do echo \"Encoding $i\" >&2; ffmpeg -v 0 -y %s /dev/stdout %s -i \"$i\" 2>/dev/null || { echo '' >&2; echo \"****** Failed to play $i ******\" >&2 ; echo '' >&2 ; touch %s ; exit 1 ; } ; done""" % (buildFilesString(in_files), intermediate_format_options, ffmpeg_input_options, error_filename)
 
     # Now run the command to convert all data coming from stdin
     output_format_options = "-acodec %s -ar %s -ab %s -ac %s -f %s" % (output_codec, output_rate, output_bitrate, output_channels, output_format)

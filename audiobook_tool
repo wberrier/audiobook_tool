@@ -1,0 +1,314 @@
+#!/usr/bin/env python
+
+# Collection of common functions and tasks when authoring audiobook files
+# See the usage for more documentation
+
+####################################################
+# ffmpeg output settings for combine_and_encode
+output_bitrate="32000"
+output_rate="22050"
+output_channels="1"
+
+# ffmpeg profiles
+ffmpeg_output_profiles = {
+        '.mp3': { 'codec': 'libmp3lame', 'format': 'mp3' },
+        '.m4b': { 'codec': 'libfaac',    'format': 'mp4' },
+        '.ogg': { 'codec': 'libvorbis',  'format': 'ogg' },
+        }
+#
+####################################################
+
+import sys
+import os
+import readline
+import re
+import time
+
+import tagpy
+import commands
+
+def lengthInSecondsTagLib(file):
+    # Need a way to get the length of a file.  exiftool works,
+    # Maybe tagpy as well...
+    # But both only give resolution down to the second... arg
+
+    # Hrm... taglib doesn't give milliseconds... does that matter?
+    # Wow, looks like the id3 tag can specify milliseconds, bu the taglib api only reports integers?  Ugh...
+
+    f = tagpy.FileRef(file)
+    seconds = f.audioProperties().length
+    # Sometimes library says there's invalid sample rates... yet upon printing them, they seem fine.  What gives?
+    #print "Sample rate: " + str(f.audioProperties().sampleRate)
+    return float(seconds)
+
+def lengthInSecondsMplayer(file):
+    # mplayer method
+
+    # This probably reports in milliseconds, since it appears to just get the length
+    # Hacky, yes... but it appears gives us milliseconds
+    status, output = commands.getstatusoutput("mplayer -vo null -ao null -identify -frames 0 '%s' | grep ID_LENGTH" % file)
+
+    # Grab everything after the equals
+    seconds = output.split('=')[1]
+
+    # str->float
+    return float(seconds)
+
+def runOrDie(command):
+    print "Running: " + command
+    ret = os.system(command)
+    if ret:
+        print command + " failed"
+        sys.exit(1)
+
+def askQuestion(question):
+    print question
+    answer=raw_input()
+    print "answer='%s'" % answer
+    return answer
+
+class Chapter:
+    def __init__(self, timeMark, name):
+        self.timeMark = timeMark
+        self.name = name
+
+    def toString(self):
+        # Takes a decimal
+
+        total_seconds = int(self.timeMark)
+        hours = total_seconds / 3600
+        minutes = (total_seconds - (hours * 3600)) / 60
+        seconds = (total_seconds - (hours * 3600) - (minutes * 60))
+
+        decimal = self.timeMark - total_seconds
+
+        # Get the float to 3 places, and grab everything after the decimal
+        milliseconds_string = ("%0.3f" % decimal).split('.')[1]
+
+        return "%02d:%02d:%02d.%s %s" % (hours, minutes, seconds, milliseconds_string, self.name)
+
+class ChapterList:
+    def __init__(self):
+        self.chapters = []
+        self.currentTimeMark = 0.0
+
+    def addChapterFromFile(self, filename):
+
+        name = os.path.splitext(os.path.basename(filename))[0]
+        self.chapters.append(Chapter(self.currentTimeMark, name))
+
+        # Update the cumalative time
+        # These give different results!  Interesting...  Wonder which one is accurate?
+        #  We'll probably need manual adjustment, so maybe it doesn't matter
+        #self.currentTimeMark += lengthInSecondsMplayer(filename)
+        self.currentTimeMark += lengthInSecondsTagLib(filename)
+
+    def playNumSeconds(self, chapterIndex, numSeconds):
+        """Easily play at a spot in a chapter to assist in verifying all chapter marks"""
+        pass
+
+    def modifyChapterTimeMark(self, chapterIndex, adjustNumSeconds, adjustSuccessive=False):
+        """Easily adjust chapter markings, optionally adjusting each successive chapter
+        adjustNumSeconds can be positive or negative
+        """
+        pass
+
+    def toString(self):
+        """Get Whole chapter listing in mp4chap import/export format"""
+        ret = ""
+        for c in self.chapters:
+            ret += c.toString() + "\n"
+        return ret
+
+    def toFile(self, filename):
+        """Write out the chapters to a file"""
+        fd = open(filename, 'w')
+        fd.write(self.toString())
+        fd.close()
+
+
+# Rip an audiobook consisting of multiple cds to wav files, one per disc
+
+# Then, use the files_to_audiobook script to encode to a single audiobook
+
+# Optionally use files_to_chapter_list to inject chapter information for m4b files
+
+# This needs to be run in it's own temporary directory, otherwise it really clouds things up.
+
+# TODO: collect track info for chapter support?  Not sure if audiobook cds use chapters as tracks,
+#  or just have tracks every few minutes.  If so, we should output one file per track instead of per disc
+def interactivelyRipCds(args):
+
+    try:
+        output = args[0]
+    except:
+        usage()
+        sys.exit(1)
+
+    if not os.path.exists(output):
+        os.mkdir(output)
+    os.chdir(output)
+
+    count = 1
+
+    while True:
+
+        # Use 2 digits, even for numbers less than 10 so sorting order is correct
+        tmp_output = "%s-%.2d.wav" % (output, count)
+
+        run_command = True
+        if os.path.exists(tmp_output):
+            answer = askQuestion("%s exists.  Overwrite or Skip? [os]" % tmp_output)
+
+            if re.search("o", answer, re.IGNORECASE):
+                run_command = True
+            else:
+                run_command = False
+
+        if run_command:
+            askQuestion("Insert disc %d and press <ENTER> when ready" % count)
+
+            # Don't start until we know there's a disc in the drive
+            poll_count = 0
+            ret = 1
+            while ret != 0:
+                print "Looking for disc..."
+                if poll_count > 30:
+                    print "Error: Could not find audio disc"
+                    sys.exit(1)
+                ret = os.system("cdparanoia -Q 2>/dev/null")
+                time.sleep(1)
+                poll_count += 1
+
+            # sleep for another 10 seconds to wait for auto insert access to calm down
+            time.sleep(10)
+
+            # Rip the whole disc to a wav file
+            runOrDie("cdparanoia --output-wav 1- '%s'" % (tmp_output))
+            runOrDie("eject")
+
+        count += 1
+
+        if re.search("(n|no)", askQuestion("Continue with disk %d? [yn]" % count), re.IGNORECASE):
+            break
+
+    return 0
+
+# generate a chapter listing to stdout that can be imported via mp4chaps
+
+# The idea is to get a generated listing, and then hack up the file,
+# and then use mp4chaps to import to a file created with files_to_audiobooks
+
+# Format: 00:00:00.000 Chapter 1
+def genChapterList(args):
+    try:
+        out_file = args[0]
+        files = args[1:]
+    except:
+        usage()
+        sys.exit(1)
+
+    cl = ChapterList()
+
+    for f in files:
+        cl.addChapterFromFile(f)
+
+    cl.toFile(out_file)
+
+    return 0
+
+def buildFilesString(files):
+    ret = ""
+    for f in files:
+        ret += " '%s'" % f
+    return ret
+
+# Combines a bunch of audio files to a single mp3, m4b, or ogg audiobook
+#  Supports any audio files supported by ffmpeg
+#  Do this in one pass to avoid a path using intermediate files going to wav, raw, and then output
+#  There is a lossy conversion, but for an audiobook, oh well...
+
+# TODO: warn user if outputting to m4b file will have over
+#  2 billion samples, or whatever the ipod limitation is... ugh
+#  http://groups.google.com/group/macvisionaries/msg/f4acb49721b51834
+#  could split files at known boundary to avoid the problem
+#  2 bil / 22050 samples = 194783 seconds
+#  = 54 hours.  Is that really our maximum?  Should be fine for most books... ?
+
+# TODO: incorporate files_to_chapter_list for m4b files that must be broken up
+def combineAndEncode(args):
+
+    try:
+        output = args[0]
+        in_files = args[1:]
+    except:
+        usage()
+        sys.exit(1)
+
+    # Get output file extension
+    output_extension = os.path.splitext(output)[1]
+
+    if not ffmpeg_output_profiles.has_key(output_extension):
+        print "Unknown file extension: " + output_extension
+        sys.exit(1)
+
+    # Pick ffmpeg output parameters based on output filetype
+    output_codec = ffmpeg_output_profiles[output_extension]['codec']
+    output_format = ffmpeg_output_profiles[output_extension]['format']
+
+    # Command to loop through all the input files and output to stdout
+    #  Use the output rate and channels to cut down on conversions
+    #  (note: a fifo was attempted, but the fifo would randomly close prematurely)
+    intermediate_format_options = "-ar %s -ac %s -f s16le" % (output_rate, output_channels)
+    player_command = "for i in %s ; do ffmpeg -y %s /dev/stdout -i \"$i\" ; done""" % (buildFilesString(in_files), intermediate_format_options)
+
+    # Now run the command to convert all data coming from stdin
+    output_format_options = "-acodec %s -ar %s -ab %s -ac %s -f %s" % (output_codec, output_rate, output_bitrate, output_channels, output_format)
+    runOrDie("( %s ) | ffmpeg -v 0 -y %s -i /dev/stdin %s '%s'" % (player_command, intermediate_format_options, output_format_options, output))
+
+
+def usage():
+    usage_text="""
+./audiobook_tool <sub command> <sub command arguments>
+
+ Sub commands:
+
+  rip_cds             <output dir>
+  combine_and_encode  <AudioBook.[mp3|m4b|ogg]> <ffmpeg recognizable audio files>
+
+  gen_chapter_list    <AudioBook.chapters.txt> <audio files>
+  *play_chapter       <AudioBook.chapters.txt> <AudioBook.m4b> <chapter index> <seconds>
+  *adjust_chapter     <AudioBook.chapters.txt> <chapter index> [--cascade] <[-]seconds>
+
+  *set_chapters       <AudioBook.m4b> <AudioBook.chapters.txt>
+  *set_metadata       <AudioBook.m4b> <Author> <Title>
+  *set_coverart       <AudioBook.m4b> <coverart image>
+
+  * - Not Finished yet
+"""
+    print usage_text
+
+
+
+if __name__ == "__main__":
+    try:
+        subcommand = sys.argv[1]
+        subcommand_args = sys.argv[2:]
+    except:
+        usage()
+        sys.exit(1)
+
+    # Set up sub command handlers
+    handlers = {}
+    handlers['rip_cds']            = interactivelyRipCds
+    handlers['combine_and_encode'] = combineAndEncode
+    handlers['gen_chapter_list']   = genChapterList
+
+    # Run the handler
+    if not handlers.has_key(subcommand):
+        usage()
+        sys.exit(1)
+    else:
+        sys.exit(handlers[subcommand]((subcommand_args)))
+
+

@@ -662,6 +662,12 @@ def getChapters(args):
 
 def setMetaData(args):
 
+    # Get optional offset
+    trackTitle = ""
+    if len(args) == 4:
+        trackTitle = args[3]
+        args.pop()
+
     try:
         (audio_file, author, title) = args
     except:
@@ -670,9 +676,15 @@ def setMetaData(args):
 
     exitIfMissing(audio_file)
 
+    # Set track title to title if no track title was passed in
+    if trackTitle == "":
+        trackTitle = title
+
     # Set author and title (TODO: more info?)
     #  Use double quotes so apostraphes can be used in titles
-    runOrDie("mp4tags -artist \"%s\" -song \"%s\" \"%s\"" % (author, title, audio_file))
+    # Itunes audiobooks uses the album as the top level tree, and then the title in the subtree.
+    #  TODO: maybe have optional title (song) for when books must be split into two
+    runOrDie("mp4tags -artist \"%s\" -album \"%s\" -song \"%s\" \"%s\"" % (author, title, trackTitle, audio_file))
 
     return 0
 
@@ -732,7 +744,7 @@ def usage():
 
   set_chapters        <AudioBook.m4b> <AudioBook.chapters.txt>
   get_chapters        <AudioBook.m4b> <AudioBook.chapters.txt>
-  set_metadata        <AudioBook.m4b> <Author> <Title>
+  set_metadata        <AudioBook.m4b> <Author> <Title> [Track Title]
   set_coverart        <AudioBook.m4b> <coverart image>
   optimize            <AudioBook.m4b>
 

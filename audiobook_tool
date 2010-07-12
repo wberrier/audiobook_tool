@@ -639,7 +639,7 @@ def setMetaData(audio_file, author, title, trackTitle=""):
     #  Use double quotes so apostraphes can be used in titles
     # Itunes audiobooks uses the album as the top level tree, and then the title in the subtree.
     #  TODO: maybe have optional title (song) for when books must be split into two
-    runOrDie("mp4tags -artist \"%s\" -album \"%s\" -song \"%s\" \"%s\"" % (author, title, trackTitle, audio_file))
+    runOrDie("mp4tags -i audiobook -artist \"%s\" -album \"%s\" -song \"%s\" \"%s\"" % (author, title, trackTitle, audio_file))
 
 def setCoverArt(audio_file, image_file):
 

@@ -395,13 +395,7 @@ class ChapterList:
 
 # This needs to be run in it's own temporary directory, otherwise it really clouds things up.
 
-def interactivelyRipCds(args):
-
-    try:
-        output = args[0]
-    except:
-        usage()
-        sys.exit(1)
+def interactivelyRipCds(output):
 
     if not os.path.exists(output):
         os.mkdir(output)
@@ -450,7 +444,6 @@ def interactivelyRipCds(args):
         if re.search("(n|no)", askQuestion("Continue with disk %d? [yn]" % count), re.IGNORECASE):
             break
 
-    return 0
 
 # generate a chapter listing to stdout that can be imported via mp4chaps
 
@@ -459,19 +452,10 @@ def interactivelyRipCds(args):
 
 # Format: 00:00:00.000 Chapter 1
 # TODO: break up chapter lists for resulting m4b files over the sample limit
-def genChapterList(args):
-    try:
-        out_file = args[0]
-        files = args[1:]
+def genChapterList(files, out_file=""):
 
-        if len(files) < 1:
-            raise
-
-        # sort the files, just in case
-        files.sort()
-    except:
-        usage()
-        sys.exit(1)
+    # sort the files, just in case
+    files.sort()
 
     cl = ChapterList()
 
@@ -479,15 +463,25 @@ def genChapterList(args):
         print "Adding file to chapter list: " + f
         cl.addChapterFromFile(f)
 
-    cl.toFile(out_file)
+    if len(out_file) > 0:
+        cl.toFile(out_file)
 
-    return 0
+    return cl
 
 def buildFilesString(files):
     ret = ""
     for f in files:
         ret += " '%s'" % f
     return ret
+
+def getFFmpegInputFormatOptions(args):
+    ffmpeg_input_format_options = ""
+    opts, remaining_args = getopt.gnu_getopt(args, "", [ "ffmpeg_input_format_options=" ])
+    for option, value in opts:
+        if option == "--ffmpeg_input_format_options":
+            ffmpeg_input_format_options = value
+    args = remaining_args
+    return (ffmpeg_input_format_options, args)
 
 # Combines a bunch of audio files to a single mp3, m4b, or ogg audiobook
 #  Supports any audio files supported by ffmpeg
@@ -506,34 +500,7 @@ def buildFilesString(files):
 #     when it tried to play it (or scroll the chapters)
 
 # TODO: incorporate gen_chapter_list for m4b files that must be broken up
-def combineAndEncode(args):
-
-    # Parse optional arguments
-    ffmpeg_input_format_options = ""
-    opts, remaining_args = getopt.gnu_getopt(args, "", [ "ffmpeg_input_format_options=" ])
-    for option, value in opts:
-        if option == "--ffmpeg_input_format_options":
-            ffmpeg_input_format_options = value
-    args = remaining_args
-
-    try:
-        output = args[0]
-        in_files = args[1:]
-
-        if len(in_files) < 1:
-            raise
-
-        # sort the files, just in case
-        in_files.sort()
-    except:
-        usage()
-        sys.exit(1)
-
-    # TODO: split up the number of outputs and encode each one
-
-    return encodeAudioBook(output, in_files, ffmpeg_input_format_options)
-
-def encodeAudioBook(output, in_files, ffmpeg_input_options=""):
+def combineAndEncode(output, in_files, ffmpeg_input_options=""):
 
     for f in in_files:
         exitIfMissing(f)
@@ -582,23 +549,8 @@ def encodeAudioBook(output, in_files, ffmpeg_input_options=""):
 
     print "Success!"
 
-    return 0
-
-def playChapterSample(args):
+def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
     """Easily play at a spot in a chapter to assist in verifying all chapter marks"""
-
-    # Get optional offset
-    offset = 0.0
-    if len(args) == 4:
-        offset = float(args[3])
-        args.pop()
-
-    try:
-        (chapter_txt, audio_file, chapter_index) = args
-        chapter_index = int(chapter_index)
-    except:
-        usage()
-        sys.exit(1)
 
     exitIfMissing(chapter_txt)
     exitIfMissing(audio_file)
@@ -615,40 +567,18 @@ def playChapterSample(args):
     #runOrDie("mplayer -ss %.3f '%s'" % (chapter.timeMark + offset, audio_file))
     runOrDie("ffplay -ss %.3f %s" % (chapter.timeMark + offset, audio_file))
 
-    return 0
 
-def adjustChapter(args):
-
-    cascade = False
-    opts, remaining_args = getopt.gnu_getopt(args, "", [ "cascade" ])
-    for option, value in opts:
-        if option == "--cascade":
-            cascade = True
-    args = remaining_args
-
-    try:
-        (chapter_txt, chapter_index, seconds) = args
-    except:
-        usage()
-        sys.exit(1)
+def adjustChapter(chapter_txt, chapter_index, seconds):
 
     exitIfMissing(chapter_txt)
 
     cl = ChapterList.fromFile(chapter_txt)
 
-    cl.adjustChapterTimeMark(int(chapter_index), float(seconds), cascade)
+    cl.adjustChapterTimeMark(chapter_index, seconds, cascade)
 
     cl.toFile(chapter_txt)
 
-    return 0
-
-def setChapters(args):
-
-    try:
-        (audio_file, chapter_txt) = args
-    except:
-        usage()
-        sys.exit(1)
+def setChapters(audio_file, chapter_txt):
 
     exitIfMissing(chapter_txt)
     exitIfMissing(audio_file)
@@ -671,14 +601,7 @@ def setChapters(args):
     if cleanup:
         os.unlink(tool_expected_chapter_file)
 
-    return 0
-
-def getChapters(args):
-    try:
-        (audio_file, chapter_txt) = args
-    except:
-        usage()
-        sys.exit(1)
+def getChapters(audio_file, chapter_txt):
 
     exitIfMissing(audio_file)
 
@@ -686,21 +609,7 @@ def getChapters(args):
 
     cl.toFile(chapter_txt)
 
-    return 0
-
-def setMetaData(args):
-
-    # Get optional offset
-    trackTitle = ""
-    if len(args) == 4:
-        trackTitle = args[3]
-        args.pop()
-
-    try:
-        (audio_file, author, title) = args
-    except:
-        usage()
-        sys.exit(1)
+def setMetaData(audio_file, author, title, trackTitle=""):
 
     exitIfMissing(audio_file)
 
@@ -714,15 +623,7 @@ def setMetaData(args):
     #  TODO: maybe have optional title (song) for when books must be split into two
     runOrDie("mp4tags -artist \"%s\" -album \"%s\" -song \"%s\" \"%s\"" % (author, title, trackTitle, audio_file))
 
-    return 0
-
-def setCoverArt(args):
-
-    try:
-        (audio_file, image_file) = args
-    except:
-        usage()
-        sys.exit(1)
+def setCoverArt(audio_file, image_file):
 
     exitIfMissing(audio_file)
     exitIfMissing(image_file)
@@ -732,15 +633,7 @@ def setCoverArt(args):
     os.system("mp4art --remove '%s'" % (audio_file))
     runOrDie("mp4art --add '%s' '%s'" % (image_file, audio_file))
 
-    return 0
-
-def optimizeMp4(args):
-
-    try:
-        audio_file = args[0]
-    except:
-        usage()
-        sys.exit(1)
+def optimizeMp4(audio_file):
 
     exitIfMissing(audio_file)
 
@@ -748,7 +641,26 @@ def optimizeMp4(args):
     #  TODO: what does this really do?
     runOrDie("mp4file --optimize '%s'" % (audio_file))
 
-    return 0
+
+def m4bFromFiles(audio_file, author, title, art_file, in_files, ffmpeg_input_format_options=""):
+    """All-in-one method to generate a book once all the necessary information is given."""
+
+    # Get the chapter name
+    chapter_txt = os.path.splitext(audio_file)[0] + "chapters.txt"
+
+    cl = genChapterList(in_files, chapter_txt)
+
+    # TODO: break up the chapter lists and combining/encoding if it exceeds the m4b max sample count
+
+    combineAndEncode(audio_file, in_files, ffmpeg_input_format_options)
+
+    setChapters(audio_file, chapter_txt)
+    setMetaData(audio_file, author, title)
+    setCoverArt(audio_file, art_file)
+    optimizeMp4(audio_file)
+
+    print "Success!"
+
 
 def validateDependencies(progs):
 
@@ -776,6 +688,8 @@ def usage():
   set_coverart        <AudioBook.m4b> <coverart image>
   optimize            <AudioBook.m4b>
 
+  m4b_from_files      <AudioBook.m4b> <Author> <Title> <coverart image> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"]
+
 """
     print usage_text
 
@@ -793,24 +707,153 @@ if __name__ == "__main__":
         usage()
         sys.exit(1)
 
-    # Set up sub command handlers
-    handlers = {}
-    handlers['rip_cds']            = interactivelyRipCds
-    handlers['combine_and_encode'] = combineAndEncode
-    handlers['gen_chapter_list']   = genChapterList
-    handlers['play_chapter']       = playChapterSample
-    handlers['adjust_chapter']     = adjustChapter
-    handlers['get_chapters']       = getChapters
-    handlers['set_chapters']       = setChapters
-    handlers['set_metadata']       = setMetaData
-    handlers['set_coverart']       = setCoverArt
-    handlers['optimize']           = optimizeMp4
+    # Parse and handle each of the sub-commands
+    #  TODO: more elegant way to parse all of this?
+    if 'rip_cds' == subcommand:
+        try:
+            output = subcommand_args[0]
+        except:
+            usage()
+            sys.exit(1)
 
-    # Run the handler
-    if not handlers.has_key(subcommand):
+        interactivelyRipCds(output)
+
+    elif 'combine_and_encode' == subcommand:
+
+        (ffmpeg_input_format_options, subcommand_args) = getFFmpegInputFormatOptions(subcommand_args)
+
+        try:
+            output = subcommand_args[0]
+            in_files = subcommand_args[1:]
+
+            if len(in_files) < 1:
+                raise
+        except:
+            usage()
+            sys.exit(1)
+
+        combineAndEncode(output, in_files, ffmpeg_input_format_options)
+
+    elif 'gen_chapter_list' == subcommand:
+        try:
+            out_file = subcommand_args[0]
+            files = subcommand_args[1:]
+
+            if len(files) < 1:
+                raise
+
+        except:
+            usage()
+            sys.exit(1)
+
+        genChapterList(files, out_file)
+
+    elif 'play_chapter' == subcommand:
+
+        # Get optional offset
+        offset = 0.0
+        if len(subcommand_args) == 4:
+            offset = float(subcommand_args[3])
+            subcommand_args.pop()
+
+        try:
+            (chapter_txt, audio_file, chapter_index) = subcommand_args
+            chapter_index = int(chapter_index)
+        except:
+            usage()
+            sys.exit(1)
+
+        playChapterSample(chapter_txt, audio_file, chapter_index, offset)
+
+    elif 'adjust_chapter' == subcommand:
+
+        cascade = False
+        for arg in subcommand_args:
+            if arg == "--cascade":
+                cascade = True
+                subcommand_args.remove(arg)
+
+        try:
+            (chapter_txt, chapter_index, seconds) = subcommand_args
+            chapter_index = int(chapter_index)
+            seconds = float(seconds)
+        except:
+            usage()
+            sys.exit(1)
+
+        adjustChapter(chapter_txt, chapter_index, seconds)
+
+    elif 'set_chapters' == subcommand:
+        try:
+            (audio_file, chapter_txt) = subcommand_args
+        except:
+            usage()
+            sys.exit(1)
+
+        setChapters(audio_file, chapter_txt)
+
+    elif 'get_chapters' == subcommand:
+        try:
+            (audio_file, chapter_txt) = subcommand_args
+        except:
+            usage()
+            sys.exit(1)
+
+        getChapters(audio_file, chapter_txt)
+
+    elif 'set_metadata' == subcommand:
+        # Get optional offset
+        trackTitle = ""
+        if len(subcommand_args) == 4:
+            trackTitle = subcommand_args[3]
+            subcommand_args.pop()
+
+        try:
+            (audio_file, author, title) = subcommand_args
+        except:
+            usage()
+            sys.exit(1)
+
+        setMetaData(audio_file, author, title, trackTitle)
+
+    elif 'set_coverart' == subcommand:
+        try:
+            (audio_file, image_file) = subcommand_args
+        except:
+            usage()
+            sys.exit(1)
+
+        setCoverArt(audio_file, image_file)
+
+    elif 'optimize' == subcommand:
+        try:
+            (audio_file,) = subcommand_args
+        except:
+            usage()
+            sys.exit(1)
+
+        optimizeMp4(audio_file)
+
+    elif 'm4b_from_files' == subcommand:
+
+        # Get optional arguments
+        (ffmpeg_input_format_options, subcommand_args) = getFFmpegInputFormatOptions(subcommand_args)
+
+        try:
+            audio_file = subcommand_args[0]
+            author     = subcommand_args[1]
+            title      = subcommand_args[2]
+            art_file   = subcommand_args[3]
+            in_files   = subcommand_args[4:]
+        except:
+            usage()
+            sys.exit(1)
+
+        m4bFromFiles(audio_file, author, title, art_file, in_files, ffmpeg_input_format_options)
+
+    else:
         usage()
         sys.exit(1)
-    else:
-        sys.exit(handlers[subcommand]((subcommand_args)))
 
+    sys.exit(0)
 

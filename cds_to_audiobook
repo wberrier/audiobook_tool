@@ -2,13 +2,25 @@
 
 # This needs to be run in it's own temporary directory, otherwise it really clouds things up.
 
-# cd audio input format
-lame_input_bits="16"
-lame_input_rate="44.1"
-lame_output_rate="22.05"
+# cd audio input settings
+input_format="s16le"
+input_rate="44100"
+input_channels="2"
 
-# mp3 bitrate
-lame_bitrate="32"
+# output settings
+output_bitrate="32000"
+output_rate="22050"
+output_channels="1"
+
+# aac
+output_codec="libfaac"
+output_format="mp4"
+output_extension="m4a"
+
+## Mp3
+#output_codec="libmp3lame"
+#output_format="mp3"
+#output_extension="mp3"
 
 import sys
 import os
@@ -35,7 +47,7 @@ except:
     print ""
     print "Usage: cds_to_audiobook <title>"
     print ""
-    print " Example: cds_to_mp3audiobook BookTitle"
+    print " Example: cds_to_audiobook BookTitle"
     print ""
     sys.exit(1)
 
@@ -44,7 +56,7 @@ if not os.path.exists(output):
 
 os.chdir(output)
 
-exitIfexists(output + ".mp3")
+exitIfexists("%s.%s" % (output, output_extension))
 
 def askQuestion(question):
     print question
@@ -95,11 +107,6 @@ while True:
     if re.search("(n|no)", askQuestion("Continue with disk %d? [yn]" % count), re.IGNORECASE):
         break
 
-
-# Works!  and the sound quality and size is quite acceptable
-#  (note: reports are that mp4b files didn't work over a certain size... just stick with mp3)
-runOrDie("(cat *.raw) | lame -r -s %s --bitwidth %s --signed --little-endian --resample %s -h -m s -a --abr %s - '%s.mp3'" % (lame_input_rate, lame_input_bits, lame_output_rate, lame_bitrate, output))
-
-# -q 80 necessary?  Looks like to down sample to 20500 we'd have to run it through a sox pipe
-#runOrDie("faac -R 44100 -B 16 -C 2 -X -w -q 80 -b 32 -o 'a_magnificent_catastrophe.m4b' '%s.raw'") % ())
+# Use ffmpeg (easier to switch formats and options) (although, files produced with it are a little bit different concerning stereo/mono)
+runOrDie("(cat *.raw) | ffmpeg -y -f %s -ar %s -ac %s -i /dev/stdin -acodec %s -ar %s -ab %s -ac %s -f %s '%s.%s'" % (input_format, input_rate, input_channels, output_codec, output_rate, output_bitrate, output_channels, output_format, output, output_extension))
 

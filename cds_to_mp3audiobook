@@ -3,22 +3,22 @@
 # This needs to be run in it's own temporary directory, otherwise it really clouds things up.
 
 # cd audio input format
-input_channels="2"
-input_rate="44100"
-input_encoding="signed-integer"
-input_bits="16"
+lame_input_bits="16"
+lame_input_rate="44.1"
+lame_output_rate="22.05"
 
-# wave output format
-output_rate="22050"
-output_channels="1"
+lame_input_bits="16"
+lame_input_rate="44.1"
+lame_output_rate="22.05"
 
-# mp3 format
-mp3_bitrate="32"
+# mp3 bitrate
+lame_bitrate="32"
 
 import sys
 import os
 import readline
 import re
+import time
 
 def runOrDie(command):
     print "Running: " + command
@@ -46,12 +46,13 @@ except:
 first_run=True
 
 #exitIfexists(output + ".raw")
-exitIfexists(output + ".wav")
 exitIfexists(output + ".mp3")
+
+count = 1
 
 while True:
     if not first_run:
-        print "More discs? [yn]"
+        print "Insert disc %d? [yn]" % count
         answer=raw_input()
         print "answer='%s'" % answer
 
@@ -60,18 +61,32 @@ while True:
 
     first_run=False
 
-    # TODO: add sensing for cdrom drive instead of failing
+    # Don't start until we know there's a disc in the drive
+    poll_count = 0
+    ret = 1
+    while ret != 0:
+        if poll_count > 30:
+            print "Error: Could not find audio disc"
+            sys.exit(1)
+        ret = os.system("cdparanoia -Q 2>/dev/null")
+        time.sleep(1)
+        poll_count += 1
+
+    # sleep for another 10 seconds to wait for auto insert access to calm down
+    time.sleep(10)
 
     # -r for little endian raw
     runOrDie("cdparanoia -r 1- /dev/stdout | cat >> '%s.raw'" % output)
 
     runOrDie("eject")
 
-runOrDie("sox -r %s -c %s -b %s -e %s '%s.raw' -r %s -c %s '%s.wav'" % (input_rate, input_channels, input_bits, input_encoding, output, output_rate, output_channels, output ))
-runOrDie("rm -f '%s.raw'" % output)
+    count += 1
+
 
 # Works!  and the sound quality and size is quite acceptable
 #  (note: reports are that mp4b files didn't work over a certain size... just stick with mp3)
-runOrDie("lame -h -m s -a --abr %s '%s.wav' '%s.mp3'" % (mp3_bitrate, output, output))
-runOrDie("rm -f '%s.wav'" % output)
+runOrDie("lame -r -s %s --bitwidth %s --signed --little-endian --resample %s -h -m s -a --abr %s '%s.raw' '%s.mp3'" % (lame_input_rate, lame_input_bits, lame_output_rate, lame_bitrate, output, output))
+
+# -q 80 necessary?  Looks like to down sample to 20500 we'd have to run it through a sox pipe
+#runOrDie("faac -R 44100 -B 16 -C 2 -X -w -q 80 -b 32 -o 'a_magnificent_catastrophe.m4b' '%s.raw'") % ())
 

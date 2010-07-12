@@ -589,7 +589,7 @@ def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
     runOrDie("ffplay -ss %.3f %s" % (chapter.timeMark + offset, audio_file))
 
 
-def adjustChapter(chapter_txt, chapter_index, seconds):
+def adjustChapter(chapter_txt, chapter_index, seconds, cascade):
 
     exitIfMissing(chapter_txt)
 
@@ -802,7 +802,7 @@ if __name__ == "__main__":
             usage()
             sys.exit(1)
 
-        adjustChapter(chapter_txt, chapter_index, seconds)
+        adjustChapter(chapter_txt, chapter_index, seconds, cascade)
 
     elif 'set_chapters' == subcommand:
         try:

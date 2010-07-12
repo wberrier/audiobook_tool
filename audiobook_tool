@@ -24,6 +24,9 @@
 # TODO: Add a verbose option, (ie: the user probably doesn't want to see the ffmpeg
 #  input output)
 
+# TODO: implement "gen_chapter_list_from_cddbid".
+#  it would fetch track info from the cddb and spit out the chapters
+
 ####################################################
 # ffmpeg output settings for combine_and_encode
 output_bitrate="32000"

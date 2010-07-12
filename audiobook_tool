@@ -46,7 +46,8 @@ def lengthInSecondsTagLib(file):
     # Wow, looks like the id3 tag can specify milliseconds, bu the taglib api only reports integers?  Ugh...
 
     if not have_tagpy:
-        return 0.0
+        print "Error: tagpy not available"
+        sys.exit(1)
 
     f = tagpy.FileRef(file)
     seconds = f.audioProperties().length
@@ -75,7 +76,12 @@ def lengthInSecondsFFplay(file):
 
     status, output = commands.getstatusoutput("ffplay -stats -vn -an '%s' " % file)
 
-    (hours, minutes, seconds, decimal) = ffplay_duration_re.search(output, re.MULTILINE).groups()
+    try:
+        (hours, minutes, seconds, decimal) = ffplay_duration_re.search(output, re.MULTILINE).groups()
+    except:
+        print "Failed to parse: "
+        print output
+        sys.exit(1)
 
     total_seconds = totalSeconds(hours, minutes, seconds, decimal)
 
@@ -289,6 +295,9 @@ def genChapterList(args):
     try:
         out_file = args[0]
         files = args[1:]
+
+        # sort the files, just in case
+        files.sort()
     except:
         usage()
         sys.exit(1)
@@ -326,6 +335,9 @@ def combineAndEncode(args):
     try:
         output = args[0]
         in_files = args[1:]
+
+        # sort the files, just in case
+        in_files.sort()
     except:
         usage()
         sys.exit(1)
@@ -344,15 +356,31 @@ def combineAndEncode(args):
     output_codec = ffmpeg_output_profiles[output_extension]['codec']
     output_format = ffmpeg_output_profiles[output_extension]['format']
 
+    error_filename = "/tmp/audiobook_tool_error.%s" % os.getpid()
+
     # Command to loop through all the input files and output to stdout
     #  Use the output rate and channels to cut down on conversions
     #  (note: a fifo was attempted, but the fifo would randomly close prematurely)
+    #  Use a tmp file to carry the error code through the pipe
     intermediate_format_options = "-ar %s -ac %s -f s16le" % (output_rate, output_channels)
-    player_command = "for i in %s ; do ffmpeg -y %s /dev/stdout -i \"$i\" ; done""" % (buildFilesString(in_files), intermediate_format_options)
+    player_command = "for i in %s ; do ffmpeg -y %s /dev/stdout -i \"$i\" || { echo '' >&2; echo \"****** Failed to play $i ******\" >&2 ; echo '' >&2 ; touch %s ; exit 1 ; } ; done""" % (buildFilesString(in_files), intermediate_format_options, error_filename)
 
     # Now run the command to convert all data coming from stdin
     output_format_options = "-acodec %s -ar %s -ab %s -ac %s -f %s" % (output_codec, output_rate, output_bitrate, output_channels, output_format)
-    runOrDie("( %s ) | ffmpeg -v 0 -y %s -i /dev/stdin %s '%s'" % (player_command, intermediate_format_options, output_format_options, output))
+    runOrDie("rm -f %s ; ( %s ) | ffmpeg -v 0 -y %s -i /dev/stdin %s '%s'" % (error_filename, player_command, intermediate_format_options, output_format_options, output))
+
+    if os.path.exists(error_filename):
+        print ""
+        print "Failed to decode input files!"
+        print ""
+        print "Suggestion: try manually converting that one file with another tool to a .wav file and use it to replace the broken input file"
+        print ""
+        print "  (ie: mplayer <file unreadable by ffmpeg> -ao pcm:file=out.wav"
+        print ""
+        os.unlink(error_filename)
+        sys.exit(1)
+
+    print "Success!"
 
     return 0
 

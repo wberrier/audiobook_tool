@@ -501,6 +501,8 @@ def interactivelyRipCds(output):
             time.sleep(10)
 
             # Rip the whole disc to a wav file
+            # TODO: rip each track individually for chapter support
+            # TODO: look up cd in cddb and name output file accordingly
             runOrDie("cdparanoia --output-wav 1- '%s'" % (tmp_output))
             runOrDie("eject")
 
@@ -642,6 +644,12 @@ def adjustChapter(chapter_txt, chapter_index, seconds, cascade):
     cl.toFile(chapter_txt)
 
 def setChapters(audio_file, chapter_txt):
+
+    # mp4v2 seems to break when there are 2 chapters in a row with the same timestamp.
+    #  this can be worked around by adding a millisecond difference
+    #  A check should be added to make sure there are no chapters with duplicate timestamps
+    #  -> but, the ipod freaks out from tiny chapters.  Just prepend the chapter with some
+    #  text instead of adding an additional chapter.
 
     exitIfMissing(chapter_txt)
     exitIfMissing(audio_file)

@@ -142,6 +142,9 @@ while True:
 runOrDie("(cat *.raw) | ffmpeg -y -f %s -ar %s -ac %s -i /dev/stdin -acodec %s -ar %s -ab %s -ac %s -f %s '%s.%s'" % (input_format, input_rate, input_channels, output_codec, output_rate, output_bitrate, output_channels, output_format, output, output_extension))
 
 # TODO: add mp4 chapter support to ffmpeg.  Maybe it would be better to have this util operate on a preexisting file... ?
+#  Or, should it be a separate program?  Actually, built it into ffmpeg, but do
+#  another pass on the file, just in case it's hosed, and needs to be
+# readjusted?  That way, you don't have to re-encode everything again to adjust the chapter marks.
 
 # TODO: add audiobook marking support to gtkpod (supposedly works for podcasts, but not audiobooks)
 

@@ -656,7 +656,15 @@ def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
     exitIfMissing(audio_file)
 
     cl = ChapterList.fromFile(chapter_txt)
-    for i in [ x for x in range(1, cl.size() + 1) if x == chapter_index or not chapter_index ]:
+    chaps = []
+    if not chapter_index:
+        chaps.extend(range(1, cl.size()))
+    else:
+        # turn "1,3-5,7,9-11" into [1, 3, 4, 5, 7, 9, 10, 11]
+        for chap_range in chapter_index.split(','):
+            chap_boundaries = chap_range.split('-')
+            chaps.extend(range(int(chap_boundaries[0]), int(chap_boundaries[len(chap_boundaries) - 1]) + 1))
+    for i in chaps:
         chapter = cl.getChapter(i)
 
         # is mplayer accurate when it comes to seeking? (ie: does it match seeking with chapters with Apple's software?)
@@ -787,7 +795,7 @@ def usage():
   combine_and_encode  <AudioBook.[mp3|m4b|ogg]> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo <float ratio>]
 
   gen_chapter_list    <AudioBook.chapters.txt> <audio files> [--tempo <float ratio>]
-  play_chapter        <AudioBook.chapters.txt> <AudioBook.m4b> [chapter index [offset]]
+  play_chapter        <AudioBook.chapters.txt> <AudioBook.m4b> [chapter range [offset]]  (range e.g. "7" or "1-3,6,8-10")
   adjust_chapter      <AudioBook.chapters.txt> <chapter index> [--cascade] <[-]seconds>
 
   set_chapters        <AudioBook.m4b> <AudioBook.chapters.txt>
@@ -883,7 +891,10 @@ if __name__ == "__main__":
         # Get optional chapter_index
         offset = 0.0
         if len(subcommand_args) == 3:
-            chapter_index = int(subcommand_args[2])
+            chapter_index = subcommand_args[2]
+            if not re.search("^\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$", chapter_index):
+                usage()
+                sys.exit(1)
             subcommand_args.pop()
         else:
             chapter_index = None

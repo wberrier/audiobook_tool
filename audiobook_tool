@@ -55,6 +55,7 @@ cmd_line_dependencies = {
         'mp4tags': '',
         'mp4file': '',
         'soxi': '',
+        'sox': '', # needed for tempo
         'cdparanoia': '',
         'eject': '',
         }
@@ -145,13 +146,30 @@ def lengthInSecondsMplayer(file):
     # str->float
     return float(seconds)
 
-def convertToWavFFmpeg(file):
-    """Returns new wav file, which the user is responsible for cleaning up"""
+def convertToWavFFmpeg(file, tempo="1.0"):
+    """Returns new wav file, which the user is responsible for cleaning up
 
-    wavFile = file + ".wav"
+    Optionally takes a tempo arg, in which the file is first run through a sox pipe
+
+    """
+
+    # Store the tempo in the filename for correct caching purposes
+    wavFile = file + "_" + tempo + ".wav"
+
+    # Run through a sox pipe if we want to change the tempo
+    #  Note: have sox write out the wav file, should be accurate, as ffmpeg is doing the decoding
+    if tempo != "1.0":
+        sox_cmd = "sox -L -t s16 -r %s -c %s - %s tempo %s 30" % (output_rate, output_channels, wavFile, tempo)
+        intermediate_format_options = "-ar %s -ac %s -f s16le" % (output_rate, output_channels)
+        command = "ffmpeg -v 0 -y %s /dev/stdout -i %s | %s" % (intermediate_format_options, file, sox_cmd)
+
+    # Normal conversion without the sox pipe
+    else:
+        command = "ffmpeg -y -i '%s' -f wav '%s' 2>/dev/null " % (file, wavFile)
+
     # Convert it if we haven't done so already
     if not os.path.exists(wavFile):
-        status, output = commands.getstatusoutput("ffmpeg -y -i '%s' -f wav '%s' " % (file, wavFile))
+        status, output = commands.getstatusoutput(command)
 
     return wavFile
 
@@ -195,7 +213,7 @@ def lengthInSecondsFFplay(file):
 # Fine, break into two regexes, since I can't seem to match both in one pass (even with re.DOTALL)
 soxi_sample_rate_re = re.compile("Sample Rate\s+: (\d+)")
 soxi_duration_re = re.compile("Duration\s+: \d\d:\d\d:\d\d\.\d\d = (\d+) samples")
-def lengthInSecondsSoxi(file):
+def lengthInSecondsSoxi(file, tempo="1.0"):
     """
     First, convert the file to a wav file, and then, using the sample rate, get the duration to the thousandths
 
@@ -215,7 +233,7 @@ def lengthInSecondsSoxi(file):
         convertToWav = True
 
     if convertToWav:
-        file = convertToWavFFmpeg(file)
+        file = convertToWavFFmpeg(file, tempo)
         #file = convertToWavMplayer(file)
 
     status, output = commands.getstatusoutput("soxi '%s' " % file)
@@ -363,7 +381,7 @@ class ChapterList:
         self.chapters.append(chapter)
         self.currentTimeMark = chapter.timeMark
 
-    def addChapterFromFile(self, filename):
+    def addChapterFromFile(self, filename, tempo="1.0"):
 
         name = os.path.splitext(filename)[0]
         self.chapters.append(Chapter(self.currentTimeMark, name))
@@ -375,7 +393,7 @@ class ChapterList:
             #self.currentTimeMark += lengthInSecondsMplayer(filename)
             #self.currentTimeMark += lengthInSecondsTagLib(filename)
             #self.currentTimeMark += lengthInSecondsFFplay(filename)
-            self.currentTimeMark += lengthInSecondsSoxi(filename)
+            self.currentTimeMark += lengthInSecondsSoxi(filename, tempo)
         except(LengthRetrievalError):
             print "Error reading file: " + filename
             sys.exit(1)
@@ -472,7 +490,7 @@ def interactivelyRipCds(output):
 
 # Format: 00:00:00.000 Chapter 1
 # TODO: break up chapter lists for resulting m4b files over the sample limit
-def genChapterList(files, out_file=""):
+def genChapterList(files, out_file="", tempo="1.0"):
 
     # sort the files, just in case
     files.sort()
@@ -481,7 +499,7 @@ def genChapterList(files, out_file=""):
 
     for f in files:
         print "Adding file to chapter list: " + f
-        cl.addChapterFromFile(f)
+        cl.addChapterFromFile(f, tempo)
 
     if len(out_file) > 0:
         cl.toFile(out_file)
@@ -493,15 +511,6 @@ def buildFilesString(files):
     for f in files:
         ret += " '%s'" % f
     return ret
-
-def getFFmpegInputFormatOptions(args):
-    ffmpeg_input_format_options = ""
-    opts, remaining_args = getopt.gnu_getopt(args, "", [ "ffmpeg_input_format_options=" ])
-    for option, value in opts:
-        if option == "--ffmpeg_input_format_options":
-            ffmpeg_input_format_options = value
-    args = remaining_args
-    return (ffmpeg_input_format_options, args)
 
 # Combines a bunch of audio files to a single mp3, m4b, or ogg audiobook
 #  Supports any audio files supported by ffmpeg
@@ -520,7 +529,7 @@ def getFFmpegInputFormatOptions(args):
 #     when it tried to play it (or scroll the chapters)
 
 # TODO: incorporate gen_chapter_list for m4b files that must be broken up
-def combineAndEncode(output, in_files, ffmpeg_input_options=""):
+def combineAndEncode(output, in_files, ffmpeg_input_options="", tempo="1.0"):
 
     for f in in_files:
         exitIfMissing(f)
@@ -538,6 +547,12 @@ def combineAndEncode(output, in_files, ffmpeg_input_options=""):
 
     error_filename = "/tmp/audiobook_tool_error.%s" % os.getpid()
 
+    # Set up sox pipe for tempo option
+    sox_pipe = ""
+    if tempo != "1.0":
+        # tempo segment of 30 (recommended for speech)
+        sox_pipe = "| sox -L -t s16 -r %s -c %s - -L -t s16 -r %s -c %s - tempo %s 30" % (output_rate, output_channels, output_rate, output_channels, tempo)
+
     # Command to loop through all the input files and output to stdout
     #  Use the output rate and channels to cut down on conversions
     #  (note: a fifo was attempted, but the fifo would randomly close prematurely)
@@ -545,11 +560,11 @@ def combineAndEncode(output, in_files, ffmpeg_input_options=""):
     intermediate_format_options = "-ar %s -ac %s -f s16le" % (output_rate, output_channels)
     # TODO: gather length by converting to a wav, getting the size via sox, piping with ffmpeg, and then cleaning up the wav file?
     #  that "could" be faster overall, even though it would slow down this step (writing each wav file to disc)
-    player_command = "for i in %s ; do echo \"Encoding $i\" >&2; ffmpeg -v 0 -y %s /dev/stdout %s -i \"$i\" 2>/dev/null || { echo '' >&2; echo \"****** Failed to play $i ******\" >&2 ; echo '' >&2 ; touch %s ; exit 1 ; } ; done""" % (buildFilesString(in_files), intermediate_format_options, ffmpeg_input_options, error_filename)
+    player_command = "for i in %s ; do echo \"Encoding $i\" >&2; ffmpeg -v 0 -y %s /dev/stdout %s -i \"$i\" 2>/dev/null %s || { echo '' >&2; echo \"****** Failed to play $i ******\" >&2 ; echo '' >&2 ; touch %s ; exit 1 ; } ; done""" % (buildFilesString(in_files), intermediate_format_options, ffmpeg_input_options, sox_pipe, error_filename)
 
     # Now run the command to convert all data coming from stdin
     output_format_options = "-acodec %s -ar %s -ab %s -ac %s -f %s" % (output_codec, output_rate, output_bitrate, output_channels, output_format)
-    runOrDie("rm -f %s ; ( %s ) | ffmpeg -v 0 -y %s -i /dev/stdin %s '%s'" % (error_filename, player_command, intermediate_format_options, output_format_options, output))
+    runOrDie("rm -f %s ; ( %s ) | ffmpeg -v 0 -y %s -i /dev/stdin %s '%s' 2>/dev/null" % (error_filename, player_command, intermediate_format_options, output_format_options, output))
 
     if os.path.exists(error_filename):
         print ""
@@ -663,17 +678,17 @@ def optimizeMp4(audio_file):
     runOrDie("mp4file --optimize '%s'" % (audio_file))
 
 
-def m4bFromFiles(audio_file, author, title, art_file, in_files, ffmpeg_input_format_options=""):
+def m4bFromFiles(audio_file, author, title, art_file, in_files, ffmpeg_input_format_options="", tempo="1.0"):
     """All-in-one method to generate a book once all the necessary information is given."""
 
     # Get the chapter name
     chapter_txt = os.path.splitext(audio_file)[0] + ".chapters.txt"
 
-    cl = genChapterList(in_files, chapter_txt)
+    cl = genChapterList(in_files, chapter_txt, tempo)
 
     # TODO: break up the chapter lists and combining/encoding if it exceeds the m4b max sample count
 
-    combineAndEncode(audio_file, in_files, ffmpeg_input_format_options)
+    combineAndEncode(audio_file, in_files, ffmpeg_input_format_options, tempo)
 
     setChapters(audio_file, chapter_txt)
     setMetaData(audio_file, author, title)
@@ -697,9 +712,9 @@ def usage():
  Sub commands:
 
   rip_cds             <output dir>
-  combine_and_encode  <AudioBook.[mp3|m4b|ogg]> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"]
+  combine_and_encode  <AudioBook.[mp3|m4b|ogg]> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo <float ratio>]
 
-  gen_chapter_list    <AudioBook.chapters.txt> <audio files>
+  gen_chapter_list    <AudioBook.chapters.txt> <audio files> [--tempo <float ratio>]
   play_chapter        <AudioBook.chapters.txt> <AudioBook.m4b> <chapter index> [offset]
   adjust_chapter      <AudioBook.chapters.txt> <chapter index> [--cascade] <[-]seconds>
 
@@ -709,7 +724,7 @@ def usage():
   set_coverart        <AudioBook.m4b> <coverart image>
   optimize            <AudioBook.m4b>
 
-  m4b_from_files      <AudioBook.m4b> <Author> <Title> <coverart image> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"]
+  m4b_from_files      <AudioBook.m4b> <Author> <Title> <coverart image> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo <float ratio>]
 
 """
     print usage_text
@@ -741,7 +756,15 @@ if __name__ == "__main__":
 
     elif 'combine_and_encode' == subcommand:
 
-        (ffmpeg_input_format_options, subcommand_args) = getFFmpegInputFormatOptions(subcommand_args)
+        # Parse the options
+        ffmpeg_input_format_options = ""
+        tempo = "1.0"
+        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", [ "ffmpeg_input_format_options=", "tempo=" ])
+        for option, value in opts:
+            if option == "--ffmpeg_input_format_options":
+                ffmpeg_input_format_options = value
+            if option == "--tempo":
+                tempo = value
 
         try:
             output = subcommand_args[0]
@@ -753,9 +776,16 @@ if __name__ == "__main__":
             usage()
             sys.exit(1)
 
-        combineAndEncode(output, in_files, ffmpeg_input_format_options)
+        combineAndEncode(output, in_files, ffmpeg_input_format_options, tempo)
 
     elif 'gen_chapter_list' == subcommand:
+        # Parse the options
+        tempo = "1.0"
+        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", [ "tempo=" ])
+        for option, value in opts:
+            if option == "--tempo":
+                tempo = value
+
         try:
             out_file = subcommand_args[0]
             files = subcommand_args[1:]
@@ -767,7 +797,7 @@ if __name__ == "__main__":
             usage()
             sys.exit(1)
 
-        genChapterList(files, out_file)
+        genChapterList(files, out_file, tempo)
 
     elif 'play_chapter' == subcommand:
 
@@ -857,8 +887,15 @@ if __name__ == "__main__":
 
     elif 'm4b_from_files' == subcommand:
 
-        # Get optional arguments
-        (ffmpeg_input_format_options, subcommand_args) = getFFmpegInputFormatOptions(subcommand_args)
+        # Parse the options
+        ffmpeg_input_format_options = ""
+        tempo = "1.0"
+        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", [ "ffmpeg_input_format_options=", "tempo=" ])
+        for option, value in opts:
+            if option == "--ffmpeg_input_format_options":
+                ffmpeg_input_format_options = value
+            if option == "--tempo":
+                tempo = value
 
         try:
             audio_file = subcommand_args[0]
@@ -870,7 +907,7 @@ if __name__ == "__main__":
             usage()
             sys.exit(1)
 
-        m4bFromFiles(audio_file, author, title, art_file, in_files, ffmpeg_input_format_options)
+        m4bFromFiles(audio_file, author, title, art_file, in_files, ffmpeg_input_format_options, tempo)
 
     else:
         usage()

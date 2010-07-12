@@ -31,6 +31,9 @@
 
 # TODO: be able to submit tracks from chapter list to cddb?
 
+# TODO: interactive detection of chapters via silence detection (ie: 3 seconds)
+#       (I guess mp3cut does something similar?)
+
 ####################################################
 # ffmpeg output settings for combine_and_encode
 output_bitrate="32000"

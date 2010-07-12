@@ -7,6 +7,20 @@
 
 # TODO: normalize audio?
 
+"""
+# TODO: document typical use cases
+
+1. Combining a whole bunch of mp3 (or any format that ffmpeg supports) to a single
+   .m4b file in one swoop.
+
+2. Doing each step manually so you can adjust the chapter list. (Note, you can also
+   do use case #1, and then extract chapter list, modify it, and then set it again)
+
+3. Ripping an audiobook from cds only differs in that you create the input files
+   (wav files) first, and then continue with the other use cases
+
+"""
+
 ####################################################
 # ffmpeg output settings for combine_and_encode
 output_bitrate="32000"

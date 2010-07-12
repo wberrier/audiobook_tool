@@ -5,6 +5,8 @@
 # Collection of common functions and tasks when authoring audiobook files
 # See the usage for more documentation
 
+# TODO: normalize audio?
+
 ####################################################
 # ffmpeg output settings for combine_and_encode
 output_bitrate="32000"
@@ -45,6 +47,7 @@ import readline
 import re
 import time
 import shutil
+import getopt
 
 import commands
 
@@ -455,6 +458,7 @@ def interactivelyRipCds(args):
 # and then use mp4chaps to import to a file created with files_to_audiobooks
 
 # Format: 00:00:00.000 Chapter 1
+# TODO: break up chapter lists for resulting m4b files over the sample limit
 def genChapterList(args):
     try:
         out_file = args[0]
@@ -472,6 +476,7 @@ def genChapterList(args):
     cl = ChapterList()
 
     for f in files:
+        print "Adding file to chapter list: " + f
         cl.addChapterFromFile(f)
 
     cl.toFile(out_file)
@@ -495,9 +500,21 @@ def buildFilesString(files):
 #  could split files at known boundary to avoid the problem
 #  2 bil / 22050 samples = 194783 seconds
 #  = 54 hours.  Is that really our maximum?  Should be fine for most books... ?
+#  -> roughly 775 m4b file is the maximum
+#  Or is it 4 billion / 22050 = 108 hours?
+#  -> 64:43 book had problems.  Chapters appeared fine, but iphone ipod app crashed
+#     when it tried to play it (or scroll the chapters)
 
 # TODO: incorporate gen_chapter_list for m4b files that must be broken up
 def combineAndEncode(args):
+
+    # Parse optional arguments
+    ffmpeg_input_format_options = ""
+    opts, remaining_args = getopt.gnu_getopt(args, "", [ "ffmpeg_input_format_options=" ])
+    for option, value in opts:
+        if option == "--ffmpeg_input_format_options":
+            ffmpeg_input_format_options = value
+    args = remaining_args
 
     try:
         output = args[0]
@@ -511,6 +528,12 @@ def combineAndEncode(args):
     except:
         usage()
         sys.exit(1)
+
+    # TODO: split up the number of outputs and encode each one
+
+    return encodeAudioBook(output, in_files, ffmpeg_input_format_options)
+
+def encodeAudioBook(output, in_files, ffmpeg_input_options=""):
 
     for f in in_files:
         exitIfMissing(f)
@@ -535,7 +558,7 @@ def combineAndEncode(args):
     intermediate_format_options = "-ar %s -ac %s -f s16le" % (output_rate, output_channels)
     # TODO: gather length by converting to a wav, getting the size via sox, piping with ffmpeg, and then cleaning up the wav file?
     #  that "could" be faster overall, even though it would slow down this step (writing each wav file to disc)
-    player_command = "for i in %s ; do ffmpeg -y %s /dev/stdout -i \"$i\" || { echo '' >&2; echo \"****** Failed to play $i ******\" >&2 ; echo '' >&2 ; touch %s ; exit 1 ; } ; done""" % (buildFilesString(in_files), intermediate_format_options, error_filename)
+    player_command = "for i in %s ; do ffmpeg -y %s /dev/stdout %s -i \"$i\" || { echo '' >&2; echo \"****** Failed to play $i ******\" >&2 ; echo '' >&2 ; touch %s ; exit 1 ; } ; done""" % (buildFilesString(in_files), intermediate_format_options, ffmpeg_input_options, error_filename)
 
     # Now run the command to convert all data coming from stdin
     output_format_options = "-acodec %s -ar %s -ab %s -ac %s -f %s" % (output_codec, output_rate, output_bitrate, output_channels, output_format)
@@ -550,6 +573,10 @@ def combineAndEncode(args):
         print "  ie: mplayer <file unreadable by ffmpeg> -ao pcm:file=tmp.wav; ffmpeg -y -i tmp.wav -f wav out.wav"
         print ""
         print "  Doing the second conversion with ffmpeg probably won't make a difference except for the paranoid"
+        print ""
+        print "Suggestion 2: specify ffmpeg input options with '--ffmpeg_input_format_options'"
+        print ""
+        print "  Note: these options will be applied to _all_ input files"
         os.unlink(error_filename)
         sys.exit(1)
 
@@ -593,10 +620,11 @@ def playChapterSample(args):
 def adjustChapter(args):
 
     cascade = False
-    for a in args:
-        if a == "--cascade":
+    opts, remaining_args = getopt.gnu_getopt(args, "", [ "cascade" ])
+    for option, value in opts:
+        if option == "--cascade":
             cascade = True
-            args.remove("--cascade")
+    args = remaining_args
 
     try:
         (chapter_txt, chapter_index, seconds) = args
@@ -736,7 +764,7 @@ def usage():
  Sub commands:
 
   rip_cds             <output dir>
-  combine_and_encode  <AudioBook.[mp3|m4b|ogg]> <ffmpeg recognizable audio files>
+  combine_and_encode  <AudioBook.[mp3|m4b|ogg]> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"]
 
   gen_chapter_list    <AudioBook.chapters.txt> <audio files>
   play_chapter        <AudioBook.chapters.txt> <AudioBook.m4b> <chapter index> [offset]

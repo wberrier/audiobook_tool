@@ -1,0 +1,87 @@
+#!/usr/bin/env python
+
+# generate a chapter listing to stdout that can be imported via mp4chaps
+
+# The idea is to get a generated listing, and then hack up the file,
+# and then use mp4chaps to import to a file created with files_to_audiobooks
+
+# Format: 00:00:00.000 Chapter 1
+
+import sys
+import os
+
+import tagpy
+import commands
+
+def lengthInSecondsTagLib(file):
+    # Need a way to get the length of a file.  exiftool works, 
+    # Maybe tagpy as well...
+    # But both only give resolution down to the second... arg
+
+    # Hrm... taglib doesn't give milliseconds... does that matter?
+    # Wow, looks like the id3 tag can specify milliseconds, bu the taglib api only reports integers?  Ugh...
+
+    f = tagpy.FileRef(file)
+    seconds = f.audioProperties().length
+    # Sometimes library says there's invalid sample rates... yet upon printing them, they seem fine.  What gives?
+    #print "Sample rate: " + str(f.audioProperties().sampleRate)
+    return float(seconds)
+
+def lengthInSecondsMplayer(file):
+    # mplayer method
+
+    # This probably reports in milliseconds, since it appears to just get the length
+    # Hacky, yes... but it appears gives us milliseconds
+    status, output = commands.getstatusoutput("mplayer -vo null -ao null -identify -frames 0 '%s' | grep ID_LENGTH" % file)
+
+    # Grab everything after the equals
+    seconds = output.split('=')[1]
+
+    # str->float
+    return float(seconds)
+
+def secondsToPrettyLength(floatSeconds):
+    # Takes a decimal
+
+    int_seconds = int(floatSeconds)
+    hours = int_seconds / 3600
+    minutes = (int_seconds - (hours * 3600)) / 60
+    seconds = (int_seconds - (hours * 3600) - (minutes * 60))
+
+    decimal = floatSeconds - int_seconds
+
+    # Get the float to 3 places, and grab everything after the decimal
+    milliseconds_string = ("%0.3f" % decimal).split('.')[1]
+
+    return "%02d:%02d:%02d.%s" % (hours, minutes, seconds, milliseconds_string)
+
+def filesToChapterList(in_files):
+
+    ret = ""
+    current_position = 0.0
+    for f in in_files:
+        # Get the base filename and remove the extension
+        # TODO: get chapter name from the mp3 tag title?
+        try:
+            chapter_name = os.path.splitext(os.path.basename(f))[0]
+        except:
+            print "Invalid file: " + f
+
+        ret += "%s %s\n" % (secondsToPrettyLength(current_position), chapter_name)
+
+        # Update the current position offset by the length of the previous file
+        current_position += lengthInSecondsMplayer(f)
+
+    return ret
+
+if __name__ == "__main__":
+    try:
+        in_files = sys.argv[1:]
+    except:
+        print "./files_to_chapter_list <in files>"
+        sys.exit(1)
+
+    output = filesToChapterList(in_files)
+
+    print output,
+

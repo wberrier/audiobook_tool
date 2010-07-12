@@ -1,0 +1,57 @@
+#!/usr/bin/env python
+
+# This needs to be run in it's own temporary directory, otherwise it really clouds things up.
+
+# audiobook settings
+bitrate="32"
+samplerate="22050"
+channels="1"
+
+import sys
+import os
+
+def runOrDie(command):
+	print "Running: " + command
+	ret = os.system(command)
+	if ret:
+		print command + " failed"
+		sys.exit(1)
+
+try:
+	(output) = sys.argv[1]
+	in_files = sys.argv[2:]
+except:
+	print ""
+	print "Usage: mp3s_to_audiobook <outfile> <mp3 input files>"
+	print ""
+	print " Example:  mp3s_to_audiobook AudioBook ../*.mp3"
+	print ""
+	sys.exit(1)
+
+for i in in_files:
+	# depends on unique files
+	#tmp_i = os.path.dirname(i)
+	# not quite...
+	#tmp_i = os.path.dirname(i) + "_" + os.path.basename(i)
+
+	# Replace all dir chars
+	tmp_i = i.replace("/", "_").replace(".", "_")
+	runOrDie("mpg123 -w '%s.wav' '%s'" % (tmp_i, i))
+	runOrDie("sox '%s.wav' -r %s -c %s -s -w '%s.raw'" % (tmp_i, samplerate, channels, tmp_i))
+	runOrDie("rm '%s.wav'" % (tmp_i))
+
+	# didn't work for some reason...
+	#runOrDie("mpg123 -w - %s | sox -t wav -r %s -c %s -s - -w %s.raw" % (i, samplerate, channels, tmp_i))
+
+runOrDie("cat *.raw >> '%s.raw'" % output)
+runOrDie("sox -r %s -c %s -s -w '%s.raw' '%s.wav'" % (samplerate, channels, output, output ))
+runOrDie("rm -f *.raw")
+
+# dah... works for small files... but not for large files (in this case 380MB)... try mp3?
+#runOrDie("faac -b %s -o %s.m4a %s.wav" % (bitrate, output, output))
+
+# Works!  and the sound quality and size is quite acceptable
+#  TODO: does abr work on the car cd mp3 player?  (I wonder if it has to be cbr... (which would be a little less quality))
+runOrDie("lame -h -m s -a --abr %s '%s.wav' '%s.mp3'" % (bitrate, output, output))
+runOrDie("rm -f '%s.wav'" % output)
+

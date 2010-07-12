@@ -1,0 +1,77 @@
+#!/usr/bin/env python
+
+# This needs to be run in it's own temporary directory, otherwise it really clouds things up.
+
+# cd audio input format
+input_channels="2"
+input_rate="44100"
+input_encoding="signed-integer"
+input_bits="16"
+
+# wave output format
+output_rate="22050"
+output_channels="1"
+
+# mp3 format
+mp3_bitrate="32"
+
+import sys
+import os
+import readline
+import re
+
+def runOrDie(command):
+    print "Running: " + command
+    ret = os.system(command)
+    if ret:
+        print command + " failed"
+        sys.exit(1)
+
+def exitIfexists(file):
+    if os.path.exists(file):
+        print "%s already exists.  Exiting." % (file)
+        sys.exit(1)
+
+
+try:
+    (script, output) = sys.argv
+except:
+    print ""
+    print "Usage: cds_to_audiobook <title>"
+    print ""
+    print " Example: cds_to_mp3audiobook BookTitle"
+    print ""
+    sys.exit(1)
+
+first_run=True
+
+#exitIfexists(output + ".raw")
+exitIfexists(output + ".wav")
+exitIfexists(output + ".mp3")
+
+while True:
+    if not first_run:
+        print "More discs? [yn]"
+        answer=raw_input()
+        print "answer='%s'" % answer
+
+        if not re.search("(y|yes)", answer, re.IGNORECASE):
+            break
+
+    first_run=False
+
+    # TODO: add sensing for cdrom drive instead of failing
+
+    # -r for little endian raw
+    runOrDie("cdparanoia -r 1- /dev/stdout | cat >> '%s.raw'" % output)
+
+    runOrDie("eject")
+
+runOrDie("sox -r %s -c %s -b %s -e %s '%s.raw' -r %s -c %s '%s.wav'" % (input_rate, input_channels, input_bits, input_encoding, output, output_rate, output_channels, output ))
+runOrDie("rm -f '%s.raw'" % output)
+
+# Works!  and the sound quality and size is quite acceptable
+#  (note: reports are that mp4b files didn't work over a certain size... just stick with mp3)
+runOrDie("lame -h -m s -a --abr %s '%s.wav' '%s.mp3'" % (mp3_bitrate, output, output))
+runOrDie("rm -f '%s.wav'" % output)
+

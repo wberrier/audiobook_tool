@@ -89,6 +89,12 @@ class LengthRetrievalError(Exception):
     def __str__(self):
         return repr(self.value)
 
+class WavConversionError(Exception):
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
+
 def lengthInSecondsTagLib(file):
     # Need a way to get the length of a file.  exiftool works,
     # Maybe tagpy as well...
@@ -169,11 +175,14 @@ def convertToWavFFmpeg(file, tempo="1.0"):
 
     # Normal conversion without the sox pipe
     else:
-        command = "ffmpeg -y -i '%s' -f wav '%s' 2>/dev/null " % (file, wavFile)
+        command = "ffmpeg -y -i '%s' -f wav '%s'" % (file, wavFile)
 
     # Convert it if we haven't done so already
     if not os.path.exists(wavFile):
         status, output = commands.getstatusoutput(command)
+        if status:
+            print output
+            raise WavConversionError("Unable to convert file to .wav: " + file)
 
     return wavFile
 

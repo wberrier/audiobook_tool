@@ -36,6 +36,12 @@ try:
 except:
     have_tagpy = False
 
+class LengthRetrievalError(Exception):
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
+
 def lengthInSecondsTagLib(file):
     # Need a way to get the length of a file.  exiftool works,
     # Maybe tagpy as well...
@@ -46,47 +52,91 @@ def lengthInSecondsTagLib(file):
     # Wow, looks like the id3 tag can specify milliseconds, bu the taglib api only reports integers?  Ugh...
 
     if not have_tagpy:
-        print "Error: tagpy not available"
-        sys.exit(1)
+        raise LengthRetrievalError("tagpy not available")
 
-    f = tagpy.FileRef(file)
-    seconds = f.audioProperties().length
+    try:
+        f = tagpy.FileRef(file)
+        seconds = f.audioProperties().length
+    except:
+        raise LengthRetrievalError("tagpy: unknown file type")
+
     # Sometimes library says there's invalid sample rates... yet upon printing them, they seem fine.  What gives?
     #print "Sample rate: " + str(f.audioProperties().sampleRate)
     return float(seconds)
 
 mplayer_duration_re = re.compile("ID_LENGTH=(.*)")
 def lengthInSecondsMplayer(file):
+    """Will convert non-wav files to wav to get a more accurate reading, but still not as accurate as what ffmpeg reports"""
     # mplayer method
+
+    convertToWav = False
+    if os.path.splitext(file)[1] != ".wav":
+        convertToWav = True
+
+    if convertToWav:
+        wavFile = file + ".wav"
+        # Convert it if we haven't done so already
+        if not os.path.exists(wavFile):
+            status, output = commands.getstatusoutput("mplayer '%s' -ao 'pcm:file=%s'" % (file, wavFile))
+        file = wavFile
 
     # This probably reports in milliseconds, since it appears to just get the length
     # Hacky, yes... but it appears gives us milliseconds
     #  -> Actually it doesn't seem to give milliseconds
     status, output = commands.getstatusoutput("mplayer -vo null -ao null -identify -frames 0 '%s'" % file)
 
-    (seconds,) = mplayer_duration_re.search(output, re.MULTILINE).groups()
+    try:
+        (seconds,) = mplayer_duration_re.search(output, re.MULTILINE).groups()
+    except(AttributeError):
+        raise LengthRetrievalError("Failed to parse: " + output)
+
+    if convertToWav:
+        # Clean up... (much faster to clean up each file than to leave them around (yay kernel disk cache))
+        os.unlink(wavFile)
 
     # str->float
     return float(seconds)
 
 ffplay_duration_re = re.compile("Duration: (\d\d):(\d\d):(\d\d).(\d\d),")
 def lengthInSecondsFFplay(file):
-    """Get the length of a file, based on ffplay.  Hundredths of a second accuracy.  (more precision than mplayer and taglib)"""
-    # -> Even though it gives more precision, it doesn't make the chapter marks any more accurate (if anything, they are worse!)
+    """Get the length of a file, based on ffplay.  Hundredths of a second accuracy.  (more precision than mplayer and taglib)
+       Even though it gives more precision, it doesn't make the chapter marks any more accurate (if anything, they are worse!)
+
+       Converting mp3s to a .wav file is _VERY_ accurate.  Much more accurate than doing the equivalent with mplayer.
+
+       For audiobooks from cds, we don't do an unnecessary conversion here, since those will be wav files
+    """
+
+    convertToWav = False
+    if os.path.splitext(file)[1] != ".wav":
+        convertToWav = True
+
+    if convertToWav:
+        wavFile = file + ".wav"
+        # Convert it if we haven't done so already
+        if not os.path.exists(wavFile):
+            status, output = commands.getstatusoutput("ffmpeg -y -i '%s' -f wav '%s' " % (file, wavFile))
+        file = wavFile
 
     status, output = commands.getstatusoutput("ffplay -stats -vn -an '%s' " % file)
 
     try:
         (hours, minutes, seconds, decimal) = ffplay_duration_re.search(output, re.MULTILINE).groups()
     except:
-        print "Failed to parse: "
-        print output
-        sys.exit(1)
+        raise LengthRetrievalError("Failed to parse: " + output)
 
     total_seconds = totalSeconds(hours, minutes, seconds, decimal)
 
+    if convertToWav:
+        # Clean up... (much faster to clean up each file than to leave them around (yay kernel disk cache))
+        os.unlink(wavFile)
+
     #  Tried rounding this... but it still gave different results than mplayer
     return float(total_seconds)
+
+# TODO: manually parse wav header . we'd also have to know the specs from the wav header... ugh
+#   but still, ffmpeg method only gives hundredths, where having thousandsth would help
+#   (one hundred of a second rounding for a hundred chapters: could be 1 second off!)
 
 def runOrDie(command):
     print "Running: " + command
@@ -179,12 +229,16 @@ class ChapterList:
         name = os.path.splitext(filename)[0]
         self.chapters.append(Chapter(self.currentTimeMark, name))
 
-        # Update the cumalative time
-        # These give different results!  Interesting...  Wonder which one is accurate?
-        #  We'll probably need manual adjustment, so maybe it doesn't matter
-        self.currentTimeMark += lengthInSecondsMplayer(filename)
-        #self.currentTimeMark += lengthInSecondsTagLib(filename)
-        #self.currentTimeMark += lengthInSecondsFFplay(filename)
+        try:
+            # Update the cumalative time
+            # These give different results!  Interesting...  Wonder which one is accurate?
+            #  We'll probably need manual adjustment, so maybe it doesn't matter
+            #self.currentTimeMark += lengthInSecondsMplayer(filename)
+            #self.currentTimeMark += lengthInSecondsTagLib(filename)
+            self.currentTimeMark += lengthInSecondsFFplay(filename)
+        except(LengthRetrievalError):
+            print "Error reading file: " + filename
+            sys.exit(1)
 
     def adjustChapterTimeMark(self, chapterIndex, adjustNumSeconds, cascade=False):
         """Easily adjust chapter markings, optionally adjusting each successive chapter
@@ -291,6 +345,9 @@ def genChapterList(args):
         out_file = args[0]
         files = args[1:]
 
+        if len(files) < 1:
+            raise
+
         # sort the files, just in case
         files.sort()
     except:
@@ -330,6 +387,9 @@ def combineAndEncode(args):
     try:
         output = args[0]
         in_files = args[1:]
+
+        if len(in_files) < 1:
+            raise
 
         # sort the files, just in case
         in_files.sort()
@@ -384,13 +444,12 @@ def playChapterSample(args):
 
     # Get optional offset
     offset = 0.0
-    if len(args) == 5:
-        offset = float(args[4])
+    if len(args) == 4:
+        offset = float(args[3])
         args.pop()
 
     try:
-        (chapter_txt, audio_file, seconds, chapter_index) = args
-        seconds = float(seconds)
+        (chapter_txt, audio_file, chapter_index) = args
         chapter_index = int(chapter_index)
     except:
         usage()
@@ -408,8 +467,8 @@ def playChapterSample(args):
     print "Playing chapter %d (%s)" % (chapter_index, chapter.name)
 
     # Different methods to play the file
-    runOrDie("mplayer -ss %.3f -endpos %.3f '%s'" % (chapter.timeMark + offset, seconds, audio_file))
-    #runOrDie("ffplay -ss %.3f %s" % (chapter.timeMark + offset, audio_file)) # Doesn't support only playing for a number of seconds
+    #runOrDie("mplayer -ss %.3f '%s'" % (chapter.timeMark + offset, audio_file))
+    runOrDie("ffplay -ss %.3f %s" % (chapter.timeMark + offset, audio_file))
 
     return 0
 
@@ -528,7 +587,7 @@ def usage():
   combine_and_encode  <AudioBook.[mp3|m4b|ogg]> <ffmpeg recognizable audio files>
 
   gen_chapter_list    <AudioBook.chapters.txt> <audio files>
-  play_chapter        <AudioBook.chapters.txt> <AudioBook.m4b> <seconds> <chapter index> [offset]
+  play_chapter        <AudioBook.chapters.txt> <AudioBook.m4b> <chapter index> [offset]
   adjust_chapter      <AudioBook.chapters.txt> <chapter index> [--cascade] <[-]seconds>
 
   set_chapters        <AudioBook.m4b> <AudioBook.chapters.txt>

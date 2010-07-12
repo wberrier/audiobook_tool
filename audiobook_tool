@@ -378,7 +378,6 @@ def setChapters(args):
         cleanup = True
 
     # Inject chapters
-    #  What does -z (optimize) do?
     runOrDie("mp4chaps --import '%s'" % (audio_file))
 
     if cleanup:
@@ -418,6 +417,22 @@ def setCoverArt(args):
 
     return 0
 
+def optimizeMp4(args):
+
+    try:
+        audio_file = args[0]
+    except:
+        usage()
+        sys.exit(1)
+
+    exitIfMissing(audio_file)
+
+    # Optimize
+    #  TODO: what does this really do?
+    runOrDie("mp4file --optimize '%s'" % (audio_file))
+
+    return 0
+
 def usage():
     usage_text="""
 ./audiobook_tool <sub command> <sub command arguments>
@@ -434,6 +449,7 @@ def usage():
   set_chapters        <AudioBook.m4b> <AudioBook.chapters.txt>
   set_metadata        <AudioBook.m4b> <Author> <Title>
   set_coverart        <AudioBook.m4b> <coverart image>
+  optimize            <AudioBook.m4b>
 
 """
     print usage_text
@@ -458,6 +474,7 @@ if __name__ == "__main__":
     handlers['set_chapters']       = setChapters
     handlers['set_metadata']       = setMetaData
     handlers['set_coverart']       = setCoverArt
+    handlers['optimize']           = optimizeMp4
 
     # Run the handler
     if not handlers.has_key(subcommand):

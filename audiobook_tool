@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+# Author: Wade Berrier  <wberrier@gmail.com>
+
 # Collection of common functions and tasks when authoring audiobook files
 # See the usage for more documentation
 
@@ -16,6 +18,23 @@ ffmpeg_output_profiles = {
         '.mp3': { 'codec': 'libmp3lame', 'format': 'mp3' },
         '.m4b': { 'codec': 'libfaac',    'format': 'mp4' },
         '.ogg': { 'codec': 'libvorbis',  'format': 'ogg' },
+        }
+#
+####################################################
+
+####################################################
+# external programs this program depends on
+cmd_line_dependencies = {
+        'ffmpeg': '',
+        'ffplay': '',
+        #'mplayer': '',
+        'mp4chaps': '',
+        'mp4art': '',
+        'mp4tags': '',
+        'mp4file': '',
+        'soxi': '',
+        'cdparanoia': '',
+        'eject': '',
         }
 #
 ####################################################
@@ -691,6 +710,13 @@ def optimizeMp4(args):
 
     return 0
 
+def validateDependencies(progs):
+
+    for p in progs:
+        (status, output) = commands.getstatusoutput("which " + p)
+        if len(output) == 0:
+            print "Warning: %s not found" % p
+
 def usage():
     usage_text="""
 ./audiobook_tool <sub command> <sub command arguments>
@@ -716,6 +742,10 @@ def usage():
 
 
 if __name__ == "__main__":
+
+    # Check for command line dependencies (only warn user)
+    validateDependencies(cmd_line_dependencies.keys())
+
     try:
         subcommand = sys.argv[1]
         subcommand_args = sys.argv[2:]

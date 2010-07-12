@@ -370,6 +370,9 @@ class ChapterList:
 
         return self.chapters[chapterIndex - 1]
 
+    def size(self):
+        return len(self.chapters)
+
     def addChapter(self, chapter):
         self.chapters.append(chapter)
         self.currentTimeMark = chapter.timeMark
@@ -652,17 +655,19 @@ def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
     exitIfMissing(chapter_txt)
     exitIfMissing(audio_file)
 
-    chapter = ChapterList.fromFile(chapter_txt).getChapter(chapter_index)
+    cl = ChapterList.fromFile(chapter_txt)
+    for i in [ x for x in range(1, cl.size() + 1) if x == chapter_index or not chapter_index ]:
+        chapter = cl.getChapter(i)
 
-    # is mplayer accurate when it comes to seeking? (ie: does it match seeking with chapters with Apple's software?)
-    #  -> doing some rough checks, it appears to match quicktime on windows
+        # is mplayer accurate when it comes to seeking? (ie: does it match seeking with chapters with Apple's software?)
+        #  -> doing some rough checks, it appears to match quicktime on windows
 
-    #  Documentation says it only seeks to second boundaries, but seeking to fractional seconds works
-    print "Playing chapter %d (%s)" % (chapter_index, chapter.name)
+        #  Documentation says it only seeks to second boundaries, but seeking to fractional seconds works
+        print "Playing chapter %d (%s)" % (i, chapter.name)
 
-    # Different methods to play the file
-    #runOrDie("mplayer -ss %.3f %s" % (chapter.timeMark + offset, shellQuote(audio_file)))
-    runOrDie("ffplay -ss %.3f %s 2>/dev/null" % (chapter.timeMark + offset, shellQuote(audio_file)))
+        # Different methods to play the file
+        #runOrDie("mplayer -ss %.3f %s" % (chapter.timeMark + offset, shellQuote(audio_file)))
+        runOrDie("ffplay -ss %.3f %s 2>/dev/null" % (chapter.timeMark + offset, shellQuote(audio_file)))
 
 
 def adjustChapter(chapter_txt, chapter_index, seconds, cascade):
@@ -782,7 +787,7 @@ def usage():
   combine_and_encode  <AudioBook.[mp3|m4b|ogg]> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo <float ratio>]
 
   gen_chapter_list    <AudioBook.chapters.txt> <audio files> [--tempo <float ratio>]
-  play_chapter        <AudioBook.chapters.txt> <AudioBook.m4b> <chapter index> [offset]
+  play_chapter        <AudioBook.chapters.txt> <AudioBook.m4b> [chapter index [offset]]
   adjust_chapter      <AudioBook.chapters.txt> <chapter index> [--cascade] <[-]seconds>
 
   set_chapters        <AudioBook.m4b> <AudioBook.chapters.txt>
@@ -875,9 +880,16 @@ if __name__ == "__main__":
             offset = float(subcommand_args[3])
             subcommand_args.pop()
 
+        # Get optional chapter_index
+        offset = 0.0
+        if len(subcommand_args) == 3:
+            chapter_index = int(subcommand_args[2])
+            subcommand_args.pop()
+        else:
+            chapter_index = None
+
         try:
-            (chapter_txt, audio_file, chapter_index) = subcommand_args
-            chapter_index = int(chapter_index)
+            (chapter_txt, audio_file) = subcommand_args
         except:
             usage()
             sys.exit(1)

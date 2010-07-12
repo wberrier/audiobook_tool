@@ -234,7 +234,7 @@ def askQuestion(question):
 
 def exitIfMissing(filename):
     if not os.path.exists(filename):
-        print "File does not exist: " + filename
+        print "Error: file does not exist: " + filename
         sys.exit(1)
 
 class Chapter:
@@ -334,7 +334,7 @@ class ChapterList:
 
     def getChapter(self, chapterIndex):
         if not (chapterIndex > 0 and chapterIndex <= len(self.chapters)):
-            print "Invalid chapter: %d" % chapterIndex
+            print "Error: invalid chapter: %d" % chapterIndex
             sys.exit(1)
 
         return self.chapters[chapterIndex - 1]
@@ -509,7 +509,7 @@ def combineAndEncode(output, in_files, ffmpeg_input_options=""):
     output_extension = os.path.splitext(output)[1]
 
     if not ffmpeg_output_profiles.has_key(output_extension):
-        print "Unknown file extension: " + output_extension
+        print "Error: unknown resulting file format: " + output_extension
         sys.exit(1)
 
     # Pick ffmpeg output parameters based on output filetype
@@ -535,15 +535,16 @@ def combineAndEncode(output, in_files, ffmpeg_input_options=""):
         print ""
         print "Failed to decode input files!"
         print ""
-        print "Suggestion: try manually converting that one file with another tool to a .wav file and use it to replace the broken input file"
+        print "Suggestion: specify ffmpeg input options with '--ffmpeg_input_format_options'"
+        print ""
+        print "  Note: these options will be applied to _all_ input files"
+        print ""
+        print "Suggestion 2: try manually converting that one file with another tool to a .wav file and use it to replace the broken input file"
         print ""
         print "  ie: mplayer <file unreadable by ffmpeg> -ao pcm:file=tmp.wav; ffmpeg -y -i tmp.wav -f wav out.wav"
         print ""
         print "  Doing the second conversion with ffmpeg probably won't make a difference except for the paranoid"
         print ""
-        print "Suggestion 2: specify ffmpeg input options with '--ffmpeg_input_format_options'"
-        print ""
-        print "  Note: these options will be applied to _all_ input files"
         os.unlink(error_filename)
         sys.exit(1)
 

@@ -1,0 +1,372 @@
+#!bash
+#
+
+# __audiobook_tool_comp_1 requires 2 arguments
+__audiobook_tool_comp_1 ()
+{
+	local c IFS=' '$'\t'$'\n'
+	for c in $1; do
+		case "$c$2" in
+		--*=*) printf %s$'\n' "$c$2" ;;
+		*.)    printf %s$'\n' "$c$2" ;;
+		*)     printf %s$'\n' "$c$2 " ;;
+		esac
+	done
+}
+
+# __audiobook_tool_comp accepts 1, 2, 3, or 4 arguments
+# generates completion reply with compgen
+__audiobook_tool_comp ()
+{
+	local cur="${COMP_WORDS[COMP_CWORD]}"
+	if [ $# -gt 2 ]; then
+		cur="$3"
+	fi
+	case "$cur" in
+	--*=)
+		COMPREPLY=()
+		;;
+	*)
+		local IFS=$'\n'
+		COMPREPLY=($(compgen -P "${2-}" \
+			-W "$(__audiobook_tool_comp_1 "${1-}" "${4-}")" \
+			-- "$cur"))
+		;;
+	esac
+}
+
+__audiobook_tool_commands ()
+{
+	if [ -n "${__audiobook_tool_command_list-}" ]; then
+		echo "$__audiobook_tool_command_list"
+		return
+	fi
+	local i IFS=" "$'\n'
+	for i in "help" $(audiobook_tool 2>&1 | sed -n '/^  [^ ]/ { s/^  \([^ ]*\) .*$/\1/; p}')
+	do
+		case $i in
+		*) echo $i;;
+		esac
+	done
+}
+
+__audiobook_tool_command_list=
+__audiobook_tool_command_list="$(__audiobook_tool_commands 2>/dev/null)"
+
+__audiobook_tool_has_doubledash ()
+{
+	local c=1
+	while [ $c -lt $COMP_CWORD ]; do
+		if [ "--" = "${COMP_WORDS[c]}" ]; then
+			return 0
+		fi
+		c=$((++c))
+	done
+	return 1
+}
+
+#just like _filedir, but adds a space, since we use -o nospace
+__audiobook_tool_filedir()
+{
+	local IFS=$'\t\n' xspec cur="${COMP_WORDS[COMP_CWORD]}"
+
+	_expand || return 0
+
+	local -a toks
+	local tmp
+	
+	# TODO: I've removed a "[ -n $tmp ] &&" before `echo $tmp',
+	#       and everything works again. If this bug
+	#       suddenly appears again (i.e. "cd /b<TAB>"
+	#       becomes "cd /"), remember to check for
+	#       other similar conditionals (here and
+	#       _filedir_xspec()). --David
+	# NOTE: The comment above has been moved outside of the subshell below, 
+	#       because quotes-in-comments-in-a-subshell cause errors on
+	#       bash-3.1.  See also: 
+	#       http://www.mail-archive.com/bug-bash@gnu.org/msg01667.html
+	toks=( ${toks[@]-} $(
+		compgen -d -- "$(quote_readline "$cur")" | {
+			while read -r tmp; do
+				echo "$tmp "
+			done
+		}
+	))
+	
+	if [[ "$1" != -d ]]; then
+		xspec=${1:+"!*.$1"}
+		toks=( ${toks[@]-} $(
+			compgen -f -X "$xspec" -- "$(quote_readline "$cur")" | {
+				while read -r tmp; do
+					[ -n $tmp ] && echo "$tmp "
+				done
+			}
+		))
+	fi
+
+	COMPREPLY=( "${COMPREPLY[@]}" "${toks[@]}" )
+}
+
+__audiobook_tool_output_file()
+{
+	__audiobook_tool_filedir '@(mp[34]|MP[34]|m4[abv]|M4[ABV]|og[ga]|OG[GA])'
+}
+
+__audiobook_tool_input_file()
+{
+	__audiobook_tool_filedir '@(mp[34]|MP[34]|m4[abv]|M4[ABV]|og[ga]|OG[GA]|wav|WAV|aac|AAC|flac|FLAC)'
+}
+
+__audiobook_tool_chapter_file()
+{
+	__audiobook_tool_filedir '@(txt|TXT)'
+}
+
+__audiobook_tool_image_file()
+{
+	__audiobook_tool_filedir '@(jpg|JPG|png|PNG)'
+}
+
+__audiobook_tool_dir()
+{
+	__audiobook_tool_filedir -d
+}
+
+__audiobook_tool_chapter_numbers()
+{
+ 	local count cur="${COMP_WORDS[COMP_CWORD]}"
+ 	if [ $# -eq 0 ] || [ ! -f "$1" ]; then
+ 		COMPREPLY=()
+ 		return 0
+ 	fi
+ 	count=$( wc -l "$1" 2>/dev/null )
+	count=${count/ *}
+ 	if [ "$count" -gt 0 ]; then
+		local seq="$(seq -f '%.0f ' 1 $count 2>/dev/null)"
+		local IFS=$'\n'
+		COMPREPLY=($(compgen -W "$seq" -- "$cur"))
+ 	else
+ 		COMPREPLY=()
+ 	fi
+}
+
+_abt_rip_cds ()
+{
+	__audiobook_tool_dir -d
+}
+
+_abt_combine_and_encode ()
+{
+	local i c=1
+
+	while [ $c -lt $COMP_CWORD ]; do
+		i="${COMP_WORDS[c]}"
+		c=$((++c))
+	done
+
+	case "${COMP_WORDS[COMP_CWORD]}" in
+	--*)
+		__audiobook_tool_comp "--ffmpeg_input_format_options="
+		;;
+	*)
+		case "$c" in
+			2) __audiobook_tool_output_file ;;
+			*) __audiobook_tool_input_file ;;
+		esac
+		;;
+	esac
+}
+	
+_abt_gen_chapter_list ()
+{
+	local i c=1
+
+	while [ $c -lt $COMP_CWORD ]; do
+		i="${COMP_WORDS[c]}"
+		c=$((++c))
+	done
+
+	case "$c" in
+		2) __audiobook_tool_chapter_file ;;
+		*) __audiobook_tool_input_file ;;
+	esac
+}
+
+_abt_play_chapter ()
+{
+	local i c=1
+
+	while [ $c -lt $COMP_CWORD ]; do
+		i="${COMP_WORDS[c]}"
+		c=$((++c))
+	done
+
+	case "$c" in
+		2) __audiobook_tool_chapter_file ;;
+		3) __audiobook_tool_output_file ;;
+		4) __audiobook_tool_chapter_numbers "${COMP_WORDS[2]}" ;;
+		*) COMPREPLY=() ;;
+	esac
+}
+
+_abt_adjust_chapter ()
+{
+	local i c=1
+
+	while [ $c -lt $COMP_CWORD ]; do
+		i="${COMP_WORDS[c]}"
+		c=$((++c))
+	done
+
+	case "$c" in
+		2) __audiobook_tool_chapter_file ;;
+		3) __audiobook_tool_chapter_numbers "${COMP_WORDS[2]}" ;;
+		4)
+		case "${COMP_WORDS[COMP_CWORD]}" in
+			--*) __audiobook_tool_comp "--cascade " ;;
+			*) COMPREPLY=() ;;
+		esac
+		;;
+		*) COMPREPLY=() ;;
+	esac
+}
+
+_abt_set_chapters ()
+{
+	local i c=1
+
+	while [ $c -lt $COMP_CWORD ]; do
+		i="${COMP_WORDS[c]}"
+		c=$((++c))
+	done
+
+	case "$c" in
+		2) __audiobook_tool_output_file ;;
+		3) __audiobook_tool_chapter_file ;;
+		*) COMPREPLY=() ;;
+	esac
+}
+
+_abt_get_chapters ()
+{
+	local i c=1
+
+	while [ $c -lt $COMP_CWORD ]; do
+		i="${COMP_WORDS[c]}"
+		c=$((++c))
+	done
+
+	case "$c" in
+		2) __audiobook_tool_output_file ;;
+		3) __audiobook_tool_chapter_file ;;
+		*) COMPREPLY=() ;;
+	esac
+}
+
+_abt_set_metadata ()
+{
+	local i c=1
+
+	while [ $c -lt $COMP_CWORD ]; do
+		i="${COMP_WORDS[c]}"
+		c=$((++c))
+	done
+
+	case "$c" in
+		2) __audiobook_tool_output_file ;;
+		*) COMPREPLY=() ;;
+	esac
+}
+
+_abt_set_coverart ()
+{
+	local i c=1
+
+	while [ $c -lt $COMP_CWORD ]; do
+		i="${COMP_WORDS[c]}"
+		c=$((++c))
+	done
+
+	case "$c" in
+		2) __audiobook_tool_output_file ;;
+		3) __audiobook_tool_image_file ;;
+		*) COMPREPLY=() ;;
+	esac
+}
+
+_abt_optimize ()
+{
+	local i c=1
+
+	while [ $c -lt $COMP_CWORD ]; do
+		i="${COMP_WORDS[c]}"
+		c=$((++c))
+	done
+
+	case "$c" in
+		2) __audiobook_tool_output_file ;;
+		*) COMPREPLY=() ;;
+	esac
+}
+
+_abt_m4b_from_files ()
+{
+	local i c=1
+
+	while [ $c -lt $COMP_CWORD ]; do
+		i="${COMP_WORDS[c]}"
+		c=$((++c))
+	done
+
+	case "$c" in
+		2) __audiobook_tool_output_file ;;
+		3) COMPREPLY=() ;;
+		4) COMPREPLY=() ;;
+		5) __audiobook_tool_image_file ;;
+		*)
+		case "${COMP_WORDS[COMP_CWORD]}" in
+			--*) __audiobook_tool_comp "--ffmpeg_input_format_options=";;
+			*) __audiobook_tool_input_file ;;
+		esac
+	esac
+}
+
+_audiobook_tool ()
+{
+	local i c=1 command
+
+	while [ $c -lt $COMP_CWORD ]; do
+		i="${COMP_WORDS[c]}"
+		case "$i" in
+		*) command="$i"; break ;;
+		esac
+		c=$((++c))
+	done
+
+	if [ -z "$command" ]; then
+		case "${COMP_WORDS[COMP_CWORD]}" in
+#		--*)   __audiobook_tool_comp " "
+#			;;
+		*)     __audiobook_tool_comp "$(__audiobook_tool_commands)" ;;
+		esac
+		return
+	fi
+
+	case "$command" in
+	rip_cds)            _abt_rip_cds ;;
+	combine_and_encode) _abt_combine_and_encode ;;
+	gen_chapter_list)   _abt_gen_chapter_list ;;
+	play_chapter)       _abt_play_chapter ;;
+	adjust_chapter)     _abt_adjust_chapter ;;
+	set_chapters)       _abt_set_chapters ;;
+	get_chapters)       _abt_get_chapters ;;
+	set_metadata)       _abt_set_metadata ;;
+	set_coverart)       _abt_set_coverart ;;
+	optimize)           _abt_optimize ;;
+	m4b_from_files)     _abt_m4b_from_files ;;
+	*)           COMPREPLY=() ;;
+	esac
+}
+
+complete -o bashdefault -o default -o nospace -F _audiobook_tool audiobook_tool 2>/dev/null \
+	|| complete -o default -o nospace -F _audiobook_tool audiobook_tool

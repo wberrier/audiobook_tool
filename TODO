@@ -17,3 +17,19 @@
 
 - interactive detection of chapters via silence detection (ie: 3 seconds)
   (cutmp3 does something similar)
+
+- Find alternative to python-cddb (or fix it).  Apparently you can't get track
+  lengths from lookups.
+  - http://audiotools.sourceforge.net/install.html  ?
+  - freedb.py from http://bebop.bigasterisk.com/python/
+  - Raw web queries? They are actually pretty simple...
+    (http://ftp.freedb.org/pub/freedb/latest/CDDBPROTO)
+  - command line 'cddbcmd' tool? (in ubuntu cddb 'package')
+
+ One potential problem of just using disc ids to generate chapter
+ lists is that the total cd length as reported by cddb is in seconds
+ (instead of something more granular).  It would probably be a little
+ bit off, and require manual adjusting.
+
+ This doesn't matter for having the actual cds, because we get lengths
+ from the real ripped audio.

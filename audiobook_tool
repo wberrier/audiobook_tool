@@ -38,6 +38,7 @@ cmd_line_dependencies = {
         'sox': '', # needed for tempo
         'cdparanoia': '',
         'eject': '',
+        'wc': '', # needed to compute input length
         }
 #
 ####################################################
@@ -168,38 +169,31 @@ def convertToWavFFmpeg(file, tempo="1.0"):
 
     return wavFile
 
-ffplay_duration_re = re.compile("Duration: (\d\d):(\d\d):(\d\d).(\d\d),")
-def lengthInSecondsFFplay(file):
-    """Get the length of a file, based on ffplay.  Hundredths of a second accuracy.  (more precision than mplayer and taglib)
-       Even though it gives more precision, it doesn't make the chapter marks any more accurate (if anything, they are worse!)
+def lengthInSecondsFFmpeg(file, tempo="1.0"):
+    """Decode input using ffmpeg to determine the length of the input
 
-       Converting mp3s to a .wav file is pretty accurate (hundredths).  Much more accurate than doing the equivalent with mplayer.
+    Optionally takes a tempo arg, in which the file is first run through a sox pipe
 
-       For audiobooks from cds, we don't do an unnecessary conversion here, since those will be wav files
     """
 
-    convertToWav = False
-    if os.path.splitext(file)[1] != ".wav":
-        convertToWav = True
+    wc_cmd = "wc --bytes"
+    ffmpeg_decode_cmd = "ffmpeg -v 0 -y -i %s -acodec pcm_s16le -f s16le -ar %s -ac %s /dev/stdout 2>/dev/null" % (shellQuote(file), output_rate, output_channels)
+    # Run through a sox pipe if we want to change the tempo
+    #  Note: have sox write out to stdout, and count with wc.  Should be accurate, as ffmpeg is doing the decoding
+    if tempo != "1.0":
+        sox_cmd = "sox -L -t s16 -r %s -c %s - -t s16 -r %s -c %s - tempo %s 30" % (output_rate, output_channels, output_rate, output_channels, tempo)
+        command = "%s | %s | %s" % (ffmpeg_decode_cmd, sox_cmd, wc_cmd)
 
-    if convertToWav:
-        file = convertToWavFFmpeg(file)
+    # Normal decode without the sox pipe
+    else:
+        command = "%s | %s" % (ffmpeg_decode_cmd, wc_cmd)
 
-    status, output = commands.getstatusoutput("ffplay -stats -vn -an %s " % shellQuote(file))
+    status, output = commands.getstatusoutput(command)
+    if status:
+        print output
+        raise WavConversionError("Unable to convert file to .wav: " + file)
 
-    try:
-        (hours, minutes, seconds, decimal) = ffplay_duration_re.search(output, re.MULTILINE).groups()
-    except:
-        raise LengthRetrievalError("Failed to parse: " + output)
-
-    total_seconds = totalSeconds(hours, minutes, seconds, decimal)
-
-    if convertToWav:
-        # Clean up... (much faster to clean up each file than to leave them around (yay kernel disk cache))
-        os.unlink(file)
-
-    #  Tried rounding this... but it still gave different results than mplayer
-    return float(total_seconds)
+    return float(output)/(float(output_rate)*float(output_channels)*2.0) # 2 because 16 bits per sample, or 2 bytes per sample
 
 # Interesting bits:
 #Sample Rate    : 22050
@@ -210,40 +204,27 @@ soxi_sample_rate_re = re.compile("Sample Rate\s+: (\d+)")
 soxi_duration_re = re.compile("Duration\s+: \d\d:\d\d:\d\d\.\d\d = (\d+) samples")
 def lengthInSecondsSoxi(file, tempo="1.0"):
     """
-    First, convert the file to a wav file, and then, using the sample rate, get the duration to the thousandths
-
-    This method is the most accurate.  Otherwise, with the ffplay method (even when converting to wav!) with a book
-    with 240 chapters, a full second discrepancy crept in.
-
-    Note: soxi does report getting the number of samples from .mp3 and other various non-wav formats, but it doesn't
-    appeart to be quite as accurate.  Even though converting to wav is slow and cumbersome, it still seems to be the
-    most accurate.
+    Use soxi to determine wave file lengths, and ffmpeg decoding for all others.
 
     Using ffmpeg to both convert to wav and to encode could also be contributing to the accuracy.  Different results
     are gotten when using mplayer to convert to a wav file (header info, or actual file output? Not sure...)
     """
 
-    convertToWav = False
+    decodeRequired = False
     if os.path.splitext(file)[1] != ".wav":
-        convertToWav = True
+        decodeRequired = True
 
-    if convertToWav:
-        file = convertToWavFFmpeg(file, tempo)
-        #file = convertToWavMplayer(file)
+    if decodeRequired:
+        seconds = lengthInSecondsFFmpeg(file, tempo)
+    else:
+        status, output = commands.getstatusoutput("soxi %s" % shellQuote(file))
 
-    status, output = commands.getstatusoutput("soxi %s" % shellQuote(file))
-
-    try:
-        (sample_rate,) = soxi_sample_rate_re.search(output).groups()
-        (num_samples,) = soxi_duration_re.search(output).groups()
-    except:
-        raise LengthRetrievalError("Failed to parse: " + output)
-
-    seconds = float(num_samples) / float(sample_rate)
-
-    if convertToWav:
-        # Clean up... (much faster to clean up each file than to leave them around (yay kernel disk cache))
-        os.unlink(file)
+        try:
+            (sample_rate,) = soxi_sample_rate_re.search(output).groups()
+            (num_samples,) = soxi_duration_re.search(output).groups()
+        except:
+            raise LengthRetrievalError("Failed to parse: " + output)
+        seconds = float(num_samples) / float(sample_rate)
 
     return float(seconds)
 

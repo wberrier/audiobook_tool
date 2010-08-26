@@ -1,4 +1,7 @@
 
+- handle case where ffmpeg fails to encode (probably with shell magic)
+  Otherwise, when creating an audiobook tool fails, it can be
+  difficult to track down
 - normalize audio?
 - document typical use cases
    1. Combining a whole bunch of mp3 (or any format that ffmpeg supports) to a single

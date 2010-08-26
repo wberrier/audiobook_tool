@@ -211,7 +211,7 @@ def lengthInSecondsSoxi(file, tempo="1.0"):
     """
 
     decodeRequired = False
-    if os.path.splitext(file)[1] != ".wav":
+    if os.path.splitext(file)[1] != ".wav" or tempo != "1.0":
         decodeRequired = True
 
     if decodeRequired:
@@ -225,6 +225,8 @@ def lengthInSecondsSoxi(file, tempo="1.0"):
         except:
             raise LengthRetrievalError("Failed to parse: " + output)
         seconds = float(num_samples) / float(sample_rate)
+        # TODO: check to see if "seconds = float(num_samples) / (float(sample_rate) * float(tempo))"
+        #       would suffice instead of sending the wave file through sox when a tempo is given
 
     return float(seconds)
 

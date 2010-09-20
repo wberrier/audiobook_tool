@@ -428,7 +428,7 @@ class ChapterList:
 
 # This needs to be run in it's own temporary directory, otherwise it really clouds things up.
 
-def interactivelyRipCds(output, cd_device):
+def interactivelyRipCds(output, cd_device, ignore_errors):
 
     if not os.path.exists(output):
         os.mkdir(output)
@@ -465,8 +465,14 @@ def interactivelyRipCds(output, cd_device):
         # sleep for another 10 seconds to wait for auto insert access to calm down
         time.sleep(10)
 
-        # Rip the whole disc to a wav file
-        runOrDie("cdparanoia %s --output-wav -B" % (("-d %s" % shellQuote(cd_device)) if cd_device else ""))
+        cdparanoia_options = ""
+        if cd_device:
+            cdparanoia_options += " -d " + shellQuote(cd_device)
+        if ignore_errors:
+            cdparanoia_options += " -Z "
+
+        # Rip the whole disc: one wav file per track
+        runOrDie("cdparanoia %s --output-wav -B" % (cdparanoia_options))
 
         # Query the disc for disc info, and use the info to query FreeDB.org
         cd = DiscID.open(cd_device)
@@ -552,14 +558,17 @@ def buildFilesString(files):
         ret += " %s" % shellQuote(f)
     return ret
 
-def getCDDevice(args):
+def getRipCdOptions(args):
     cd_device = None
-    opts, remaining_args = getopt.gnu_getopt(args, "", [ "cd_device=" ])
+    ignore_errors = False
+    opts, remaining_args = getopt.gnu_getopt(args, "", [ "cd_device=", "ignore_errors" ])
     for option, value in opts:
         if option == "--cd_device":
             cd_device = value
+        elif option == "--ignore_errors":
+            ignore_errors = value
     args = remaining_args
-    return (cd_device, args)
+    return (cd_device, ignore_errors, args)
 
 # Combines a bunch of audio files to a single mp3, m4b, or ogg audiobook
 #  Supports any audio files supported by ffmpeg
@@ -776,7 +785,7 @@ def usage():
 
  Sub commands:
 
-  rip_cds             <output dir> [--cd_device="device"]
+  rip_cds             <output dir> [--cd_device="device"] [ --ignore_errors ]
   combine_and_encode  <AudioBook.[mp3|m4b|ogg]> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo <float ratio>]
 
   gen_chapter_list    <AudioBook.chapters.txt> <audio files> [--tempo <float ratio>]
@@ -811,14 +820,14 @@ if __name__ == "__main__":
     # Parse and handle each of the sub-commands
     #  TODO: more elegant way to parse all of this?
     if 'rip_cds' == subcommand:
-        (cd_device, subcommand_args) = getCDDevice(subcommand_args)
+        (cd_device, ignore_errors, subcommand_args) = getRipCdOptions(subcommand_args)
         try:
             output = subcommand_args[0]
         except:
             usage()
             sys.exit(1)
 
-        interactivelyRipCds(output, cd_device)
+        interactivelyRipCds(output, cd_device, ignore_errors)
 
     elif 'combine_and_encode' == subcommand:
 

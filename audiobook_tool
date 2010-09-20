@@ -479,7 +479,7 @@ def interactivelyRipCds(output, cd_device, ignore_errors):
         disc_id = DiscID.disc_id(cd)
         (query_status, query_info) = CDDB.query(disc_id, client_name='audiobook_tool',
                 client_version=1.0, host='localhost', user='audiobook_tool_user')
-        if query_status in [210, 211]:
+        if query_status == 211:
             print "Multiple discs found in CDDB:"
             for i in range(0, len(query_info)):
                 print "%d: %s" % (i + 1, query_info[i]['title'])
@@ -489,8 +489,10 @@ def interactivelyRipCds(output, cd_device, ignore_errors):
         elif query_status == 200:
             (cat,id) = [query_info['category'], query_info['disc_id']]
 
-        (read_status, read_info) = CDDB.read(cat, id, client_name='audiobook_tool', client_version=1.0,
-                host='localhost', user='audiobook_tool_user')
+        # If we found a match...
+        if query_status in [211, 200]:
+            (read_status, read_info) = CDDB.read(cat, id, client_name='audiobook_tool', client_version=1.0,
+                    host='localhost', user='audiobook_tool_user')
 
         # find the files produced by ripping the disc
         new_files = glob.glob('track[0-9][0-9].cdda.wav')
@@ -505,7 +507,8 @@ def interactivelyRipCds(output, cd_device, ignore_errors):
                 #Shouldn't ever get this
                 continue
             i = int(i, 10)
-            if (query_status in [200,210,211] and read_status == 210):
+            # Note: read_status and read_info will be populated as long as query_status is either 200 or 211
+            if (query_status in [200,211] and read_status == 210):
                 name = read_info['TTITLE%d' % (i - 1)]
             else:
                 name = "Chapter %d" % chapter_count

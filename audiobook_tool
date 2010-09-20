@@ -512,7 +512,7 @@ def interactivelyRipCds(output, cd_device, ignore_errors):
                 name = read_info['TTITLE%d' % (i - 1)]
             else:
                 name = "Chapter %d" % chapter_count
-            tmp_output = '%s-%.2d-%.2d-%s.wav' % (output, count, i, name)
+            tmp_output = '%.2d-%.2d-%s.wav' % (count, i, name)
             print "Writing file %s" % tmp_output
             if os.path.exists(tmp_output):
                 answer = askQuestion("%s exists.  Overwrite or Quit? [oq]" % tmp_output)

@@ -668,7 +668,7 @@ def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
     cl = ChapterList.fromFile(chapter_txt)
     chaps = []
     if not chapter_index:
-        chaps.extend(range(1, cl.size()))
+        chaps.extend(range(1, cl.size() + 1))
     else:
         # turn "1,3-5,7,9-11" into [1, 3, 4, 5, 7, 9, 10, 11]
         for chap_range in chapter_index.split(','):
@@ -681,7 +681,7 @@ def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
         #  -> doing some rough checks, it appears to match quicktime on windows
 
         #  Documentation says it only seeks to second boundaries, but seeking to fractional seconds works
-        print "Playing chapter %d (%s)" % (i, chapter.name)
+        print "Playing section %d (%s)" % (i, chapter.name)
 
         # Different methods to play the file
         # TODO: add back play duration support (I think only mplayer supports this)

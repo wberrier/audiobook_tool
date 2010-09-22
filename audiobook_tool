@@ -681,7 +681,7 @@ def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
         #  -> doing some rough checks, it appears to match quicktime on windows
 
         #  Documentation says it only seeks to second boundaries, but seeking to fractional seconds works
-        print "Playing section %d (%s)" % (i, chapter.name)
+        print "Playing chapter %d (%s)" % (i, chapter.name)
 
         # Different methods to play the file
         # TODO: add back play duration support (I think only mplayer supports this)

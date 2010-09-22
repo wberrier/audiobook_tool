@@ -420,7 +420,61 @@ class ChapterList:
         fd.close()
 
 
-# Rip an audiobook consisting of multiple cds to wav files, one per track per disc
+def getCdTrackList(cd_device, track_count_offset):
+    """Try to get a track listing from cddb.
+    If none found, generate a generic track listing starting from track_count_offset
+    """
+
+    # Query the disc for disc info, and use the info to query FreeDB.org
+    cd = DiscID.open(cd_device)
+    disc_id = DiscID.disc_id(cd)
+    num_tracks = disc_id[1]
+    print "Num tracks: %d" % num_tracks
+    lookup_successful = True
+    try:
+        (query_status, query_info) = CDDB.query(disc_id, client_name='audiobook_tool',
+                client_version=1.0, host='localhost', user='audiobook_tool_user')
+        if query_status == 211:
+            print "Multiple discs found in CDDB:"
+            for i in range(0, len(query_info)):
+                print "%d: %s" % (i + 1, query_info[i]['title'])
+            answer = askQuestion("Which select which disc? (blank for none) [1-%d]" % len(query_info))
+            i = int(answer) - 1
+            (cat, id) = [query_info[i]['category'], query_info[i]['disc_id']]
+        elif query_status == 200:
+            (cat,id) = [query_info['category'], query_info['disc_id']]
+    except IOError:
+        print "Warning: failed to connect internet database... using generic track names"
+        lookup_successful = False
+    except ValueError:
+        print "Error: invalid cddb response, exiting..."
+        sys.exit(1)
+
+    # Populate a structure of lists to return to the user
+    # (may be extended if more info is needed from the cddb lookup)
+    track_list = []
+
+    # If we found a match...
+    if lookup_successful and query_status in [211, 200]:
+        (read_status, read_info) = CDDB.read(cat, id, client_name='audiobook_tool', client_version=1.0,
+                host='localhost', user='audiobook_tool_user')
+        for i in range(0, num_tracks):
+            title_key = "TTITLE%d" % i
+            if read_info.has_key(title_key):
+                track_list.append(read_info[key])
+            else:
+                print "Error: actual cd has %d tracks, but metadata from cddb has less than this" % num_tracks
+                sys.exit(1)
+
+    # We didn't find a match... generate the track listing manually
+    else:
+        for i in range(1, num_tracks + 1):
+            track_list.append("Track %d" % (i + track_count_offset))
+
+    return track_list
+
+
+# Rip an audiobook consisting of multiple cds to wav files, one file per track on each disc
 
 # Then, use the combine_and_encode to encode to a single audiobook
 
@@ -434,21 +488,17 @@ def interactivelyRipCds(output, cd_device, ignore_errors):
         os.mkdir(output)
     os.chdir(output)
 
-    count = 1
-    chapter_count = 1
+    disc_count = 1
+    total_track_count = 0
 
-    new_files = glob.glob('track[0-9][0-9].cdda.wav')
-    if new_files:
-        answer = askQuestion("File(s) %s exist(s).  Delete or Quit? [dq]" % ", ".join(new_files))
-
-        if re.search("d", answer, re.IGNORECASE):
-            for new_file in new_files:
-                os.unlink(new_file)
-        else:
-            sys.exit(1)
+    cdparanoia_options = ""
+    if cd_device:
+        cdparanoia_options += " -d " + shellQuote(cd_device)
+    if ignore_errors:
+        cdparanoia_options += " -Z "
 
     while True:
-        askQuestion("Insert disc %d and press <ENTER> when ready" % count)
+        askQuestion("Insert disc %d and press <ENTER> when ready" % disc_count)
 
         # Don't start until we know there's a disc in the drive
         poll_count = 0
@@ -458,77 +508,40 @@ def interactivelyRipCds(output, cd_device, ignore_errors):
             if poll_count > 30:
                 print "Error: Could not find audio disc"
                 sys.exit(1)
-            ret = os.system("cdparanoia -Q %s 2>/dev/null" % (("-d %s" % shellQuote(cd_device)) if cd_device else ""))
+            ret = os.system("cdparanoia -Q %s 2>/dev/null" % cdparanoia_options)
             time.sleep(1)
             poll_count += 1
 
         # sleep for another 10 seconds to wait for auto insert access to calm down
         time.sleep(10)
 
-        cdparanoia_options = ""
-        if cd_device:
-            cdparanoia_options += " -d " + shellQuote(cd_device)
-        if ignore_errors:
-            cdparanoia_options += " -Z "
+        track_list = getCdTrackList(cd_device, total_track_count)
+        total_track_count += len(track_list)
+        track_count = 1
 
-        # Rip the whole disc: one wav file per track
-        runOrDie("cdparanoia %s --output-wav -B" % (cdparanoia_options))
+        for track_name in track_list:
+            track_filename = '%.2d-%.2d-%s.wav' % (disc_count, track_count, track_name)
+            print "Track filename: " + track_name
 
-        # Query the disc for disc info, and use the info to query FreeDB.org
-        cd = DiscID.open(cd_device)
-        disc_id = DiscID.disc_id(cd)
-        (query_status, query_info) = CDDB.query(disc_id, client_name='audiobook_tool',
-                client_version=1.0, host='localhost', user='audiobook_tool_user')
-        if query_status == 211:
-            print "Multiple discs found in CDDB:"
-            for i in range(0, len(query_info)):
-                print "%d: %s" % (i + 1, query_info[i]['title'])
-            answer = askQuestion("Which select which disc? (blank for none) [1-%d]" % len(query_info))
-            i = int(answer) - 1
-            (cat, id) = [query_info[i]['category'], query_info[i]['disc_id']]
-        elif query_status == 200:
-            (cat,id) = [query_info['category'], query_info['disc_id']]
+            rip_track = True
+            # Default is to skip if the file exists
+            if os.path.exists(track_filename) and not re.search("o", askQuestion("%s exists.  Skip or Overwrite? [So]" % track_filename), re.IGNORECASE):
+                rip_track = False
 
-        # If we found a match...
-        if query_status in [211, 200]:
-            (read_status, read_info) = CDDB.read(cat, id, client_name='audiobook_tool', client_version=1.0,
-                    host='localhost', user='audiobook_tool_user')
+            if rip_track:
+                command_to_run = "cdparanoia %s --output-wav %d %s" % (cdparanoia_options, track_count, shellQuote(track_filename))
+                runOrDie(command_to_run)
 
-        # find the files produced by ripping the disc
-        new_files = glob.glob('track[0-9][0-9].cdda.wav')
-        new_files.sort()
+                # Testing
+                #print "Running command: " + command_to_run
+                #os.system("touch %s" % shellQuote(track_filename))
 
-        track_number_re = re.compile("^track(\d+)\.cdda\.wav$")
-
-        for track in new_files:
-            try:
-                (i,) = track_number_re.search(track).groups()
-            except(AttributeError):
-                #Shouldn't ever get this
-                continue
-            i = int(i, 10)
-            # Note: read_status and read_info will be populated as long as query_status is either 200 or 211
-            if (query_status in [200,211] and read_status == 210):
-                name = read_info['TTITLE%d' % (i - 1)]
-            else:
-                name = "Chapter %d" % chapter_count
-            tmp_output = '%.2d-%.2d-%s.wav' % (count, i, name)
-            print "Writing file %s" % tmp_output
-            if os.path.exists(tmp_output):
-                answer = askQuestion("%s exists.  Overwrite or Quit? [oq]" % tmp_output)
-
-                if re.search("o", answer, re.IGNORECASE):
-                    os.rename(track, tmp_output)
-                else:
-                    os.unlink(track)
-            else:
-                os.rename(track, tmp_output)
-            chapter_count += 1
+            track_count += 1
 
         runOrDie("eject %s" % (shellQuote(cd_device) if cd_device else ""))
-        count += 1
+        disc_count += 1
 
-        if re.search("(n|no)", askQuestion("Continue with disk %d? [yn]" % count), re.IGNORECASE):
+        if re.search("(n|no)", askQuestion("Continue with disk %d? [Yn]" % disc_count), re.IGNORECASE):
             break
 
 

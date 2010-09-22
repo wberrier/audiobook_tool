@@ -1,4 +1,5 @@
-
+- add back play duration support (I think only mplayer supports this)
+  Idea being you can play each track for 1 second to easily scan them
 - handle case where ffmpeg fails to encode (probably with shell magic)
   Otherwise, when creating an audiobook tool fails, it can be
   difficult to track down

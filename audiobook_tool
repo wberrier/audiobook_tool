@@ -28,8 +28,8 @@ ffmpeg_output_profiles = {
 # external programs this program depends on
 cmd_line_dependencies = {
         'ffmpeg': '',
-        'ffplay': '',
-        #'mplayer': '',
+        #'ffplay': '',
+        'mplayer': '',
         'mp4chaps': '',
         'mp4art': '',
         'mp4tags': '',
@@ -684,8 +684,11 @@ def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
         print "Playing chapter %d (%s)" % (i, chapter.name)
 
         # Different methods to play the file
-        #runOrDie("mplayer -ss %.3f %s" % (chapter.timeMark + offset, shellQuote(audio_file)))
-        runOrDie("ffplay -ss %.3f %s 2>/dev/null" % (chapter.timeMark + offset, shellQuote(audio_file)))
+        # TODO: add back play duration support (I think only mplayer supports this)
+        #  Idea being you can play each track for 1 second to easily scan them
+        runOrDie("mplayer -ss %.3f %s >/dev/null 2>&1" % (chapter.timeMark + offset, shellQuote(audio_file)))
+
+        #runOrDie("ffplay -ss %.3f %s 2>/dev/null" % (chapter.timeMark + offset, shellQuote(audio_file)))
 
 
 def adjustChapter(chapter_txt, chapter_index, seconds, cascade):

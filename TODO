@@ -17,10 +17,21 @@
 - implement "gen_chapter_list_from_cddbid".
   it would fetch track info from the cddb and spit out the chapters
 
+  Not really worth doing since cddb reports track lengths in seconds
+  instead of milliseconds.
+
 - be able to submit tracks from chapter list to cddb?
 
 - interactive detection of chapters via silence detection (ie: 3 seconds)
   (cutmp3 does something similar)
+  Could this be done with sox?
+  a workflow using a play_chapter-like command, that finds and plays detected
+  silence marks, and prompts to confirm a chapter
+
+  Doesn't look like it's possible with sox, but maybe you could make a
+  command that uses libsox, and accepts input from stdin.  You could
+  pipe ffmpeg output to it and have it spit out detected silience
+  markers.
 
 - Find alternative to python-cddb (or fix it).  Apparently you can't get track
   lengths from lookups.

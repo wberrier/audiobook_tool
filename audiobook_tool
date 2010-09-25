@@ -483,14 +483,11 @@ def getCdTrackList(cd_device, track_count_offset):
 
 # This needs to be run in it's own temporary directory, otherwise it really clouds things up.
 
-def interactivelyRipCds(output, cd_device, ignore_errors):
+def interactivelyRipCds(output, cd_device, ignore_errors, disc_count, total_track_count):
 
     if not os.path.exists(output):
         os.mkdir(output)
     os.chdir(output)
-
-    disc_count = 1
-    total_track_count = 0
 
     cdparanoia_options = ""
     if cd_device:
@@ -583,7 +580,7 @@ def getRipCdOptions(args):
         if option == "--cd_device":
             cd_device = value
         elif option == "--ignore_errors":
-            ignore_errors = value
+            ignore_errors = True
     args = remaining_args
     return (cd_device, ignore_errors, args)
 
@@ -805,7 +802,7 @@ def usage():
 
  Sub commands:
 
-  rip_cds             <output dir> [--cd_device="device"] [ --ignore_errors ]
+  rip_cds             <output dir> [--cd_device="device"] [ --ignore_errors ] [ <disc number> <num_previous_tracks> ]
   combine_and_encode  <AudioBook.[mp3|m4b|ogg]> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo <float ratio>]
 
   gen_chapter_list    <AudioBook.chapters.txt> <audio files> [--tempo <float ratio>]
@@ -841,13 +838,18 @@ if __name__ == "__main__":
     #  TODO: more elegant way to parse all of this?
     if 'rip_cds' == subcommand:
         (cd_device, ignore_errors, subcommand_args) = getRipCdOptions(subcommand_args)
+        disc_num = "1"
+        num_previous_tracks = "0"
         try:
-            output = subcommand_args[0]
+            if len(subcommand_args) > 1:
+                (output, disc_num, num_previous_tracks) = subcommand_args
+            else:
+                output = subcommand_args[0]
         except:
             usage()
             sys.exit(1)
 
-        interactivelyRipCds(output, cd_device, ignore_errors)
+        interactivelyRipCds(output, cd_device, ignore_errors, int(disc_num), int(num_previous_tracks))
 
     elif 'combine_and_encode' == subcommand:
 

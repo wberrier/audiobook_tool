@@ -442,6 +442,7 @@ def getCdTrackList(cd_device, track_count_offset):
             i = int(answer) - 1
             (cat, id) = [query_info[i]['category'], query_info[i]['disc_id']]
         elif query_status == 200:
+            print "Found match in CDDB!"
             (cat,id) = [query_info['category'], query_info['disc_id']]
     except IOError:
         print "Warning: failed to connect internet database... using generic track names"
@@ -461,7 +462,7 @@ def getCdTrackList(cd_device, track_count_offset):
         for i in range(0, num_tracks):
             title_key = "TTITLE%d" % i
             if read_info.has_key(title_key):
-                track_list.append(read_info[key])
+                track_list.append(read_info[title_key])
             else:
                 print "Error: actual cd has %d tracks, but metadata from cddb has less than this" % num_tracks
                 sys.exit(1)

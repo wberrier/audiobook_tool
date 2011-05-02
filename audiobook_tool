@@ -189,7 +189,8 @@ def lengthInSecondsFFmpeg(file, tempo="1.0"):
         command = "%s | %s" % (ffmpeg_decode_cmd, wc_cmd)
 
     status, output = commands.getstatusoutput(command)
-    if status:
+    # If there was a return code error, or we counted 0 bytes -> error
+    if status or output == "0":
         print output
         raise WavConversionError("Unable to convert file to .wav: " + file)
 
@@ -235,11 +236,13 @@ def lengthInSecondsSoxi(file, tempo="1.0"):
 #   (one hundred of a second rounding for a hundred chapters: could be 1 second off!)
 # -> shelling out to soxi is probably sufficient
 
-def runOrDie(command):
+def runOrDie(command, error_message=""):
     print "Running: " + command
     ret = os.system(command)
     if ret:
         print command + " failed"
+        if len(error_message):
+            print "Error: " + error_message
         sys.exit(1)
 
 def askQuestion(question):
@@ -632,11 +635,11 @@ def combineAndEncode(output, in_files, ffmpeg_input_options="", tempo="1.0"):
     intermediate_format_options = "-ar %s -ac %s -f s16le" % (output_rate, output_channels)
     # TODO: gather length by converting to a wav, getting the size via sox, piping with ffmpeg, and then cleaning up the wav file?
     #  that "could" be faster overall, even though it would slow down this step (writing each wav file to disc)
-    player_command = "for i in %s ; do echo \"Encoding $i\" >&2; ffmpeg -v 0 -y %s /dev/stdout %s -i \"$i\" 2>/dev/null || { echo '' >&2; echo \"****** Failed to play $i ******\" >&2 ; echo '' >&2 ; touch %s ; exit 1 ; } ; done""" % (buildFilesString(in_files), intermediate_format_options, ffmpeg_input_options, shellQuote(error_filename))
+    player_command = "for i in %s ; do echo \"Encoding $i\" >&2; ffmpeg -v 0 -y %s /dev/stdout %s -i \"$i\" 2>/dev/null || { echo '' >&2; echo \"****** Failed to decode $i ******\" >&2 ; echo '' >&2 ; touch %s ; exit 1 ; } ; done""" % (buildFilesString(in_files), intermediate_format_options, ffmpeg_input_options, shellQuote(error_filename))
 
     # Now run the command to convert all data coming from stdin
     output_format_options = "-acodec %s -ar %s -ab %s -ac %s -f %s" % (output_codec, output_rate, output_bitrate, output_channels, output_format)
-    runOrDie("rm -f %s ; ( %s ) %s | ffmpeg -v 0 -y %s -i /dev/stdin %s %s 2>/dev/null" % (shellQuote(error_filename), player_command, sox_pipe, intermediate_format_options, output_format_options, shellQuote(output)))
+    runOrDie("rm -f %s ; ( %s ) %s | ffmpeg -v 0 -y %s -i /dev/stdin %s %s 2>/dev/null" % (shellQuote(error_filename), player_command, sox_pipe, intermediate_format_options, output_format_options, shellQuote(output)), error_message="Encoding failed")
 
     if os.path.exists(error_filename):
         print ""

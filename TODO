@@ -1,8 +1,14 @@
-- add set_tempo command.
-  android devices don't have an audiobook player that does on the fly
-  tempo changes.  Joel had a great idea: implement set_tempo to
-  re-encode existing books with a new tempo.  Suck the metadata out,
-  re-encode, and import metadata back in.
+- Add support for ogg files
+  android audiobook player supports them
+  question: do chapters work?
+  (I have to re-encode for android anyways... no reason not to use
+  vorbis)
+  Akimbo can use presto for playing faster, but apparently that uses a
+  lot of cpu power.  Maybe better to just fix the speed?
+  Would be nice to support ogg.
+  Looks like a better alternative would be to support matroska
+  audiobooks (webm format is based on matroska)
+  Until then... just stick with m4b.
 - Print ffmpeg output on error
 - Add option to rip_cds to skip cddb lookup
 - check to make sure that first chapter mark is at 0 (maybe when

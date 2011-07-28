@@ -34,6 +34,7 @@ cmd_line_dependencies = {
         'mp4art': '',
         'mp4tags': '',
         'mp4file': '',
+        'mp4info': '',
         'soxi': '',
         'sox': '', # needed for tempo
         'cdparanoia': '',
@@ -284,6 +285,10 @@ class Chapter:
         obj = cls(total_seconds, chapter_name)
         return obj
 
+    def adjustTempo(self, tempo):
+        """Compute new chapter mark based on new tempo"""
+        self.timeMark /= float(tempo)
+
     def toString(self):
         # Takes a decimal
 
@@ -408,6 +413,11 @@ class ChapterList:
             # Only do one chapter, or do all the rest?
             if not cascade:
                 break
+
+    def adjustTempo(self, tempo):
+        """Adjust chapter offsets based on a new tempo"""
+        for c in self.chapters:
+            c.adjustTempo(tempo)
 
     def toString(self):
         """Get Whole chapter listing in mp4chap import/export format"""
@@ -753,6 +763,37 @@ def setMetaData(audio_file, author, title, trackTitle=""):
     #  TODO: maybe have optional title (song) for when books must be split into two
     runOrDie("mp4tags -i audiobook -artist %s -album %s -song %s %s" % (shellQuote(author), shellQuote(title), shellQuote(trackTitle), shellQuote(audio_file)))
 
+def getMetaData(audio_file):
+    exitIfMissing(audio_file)
+
+    author = ""
+    title = ""
+    trackTitle = ""
+
+    (status, output) = commands.getstatusoutput("mp4info %s" % shellQuote(audio_file))
+
+    for line in output.split("\n"):
+        title_ret = re.search(" Name: (.*)", line)
+        author_ret = re.search(" (Artist|Author): (.*)", line)
+        trackTitle_ret = re.search(" Album: (.*)", line)
+
+        if title_ret:
+            title = title_ret.group(1)
+        elif author_ret:
+            if not author and author_ret.group(2):
+                author = author_ret.group(2)
+        elif trackTitle_ret:
+            trackTitle = trackTitle_ret.group(1)
+
+    print "Author: " + author
+    print "Title: " + title
+
+    if author and title:
+        return (author, title, trackTitle)
+    else:
+        print "Error getting metadata from: " + audio_file
+        sys.exit(1)
+
 def setCoverArt(audio_file, image_file):
 
     exitIfMissing(audio_file)
@@ -762,6 +803,15 @@ def setCoverArt(audio_file, image_file):
     # (fails if no art is set... oh well)
     os.system("mp4art --remove %s" % shellQuote(audio_file))
     runOrDie("mp4art --add %s %s" % (shellQuote(image_file), shellQuote(audio_file)))
+
+def getCoverArt(audio_file):
+
+    exitIfMissing(audio_file)
+
+    # Get Coverart
+    os.system("mp4art --overwrite --force --extract %s" % shellQuote(audio_file))
+
+    return glob.glob(os.path.splitext(audio_file)[0] + ".art*.jpg")
 
 def optimizeMp4(audio_file):
 
@@ -787,6 +837,39 @@ def m4bFromFiles(audio_file, author, title, art_file, in_files, ffmpeg_input_for
     setChapters(audio_file, chapter_txt)
     setMetaData(audio_file, author, title)
     setCoverArt(audio_file, art_file)
+    optimizeMp4(audio_file)
+
+    print "Success!"
+
+def setM4bTempo(audio_file, in_file, ffmpeg_input_format_options="", tempo="1.0"):
+    """Re-encode m4b file to another tempo (for devices that can't do it on the fly: android)
+    Basically the same as combine_and_encode except it preserves metadata and adjusts chapters"""
+
+    basename = os.path.splitext(audio_file)[0]
+
+    # Get all the metadata
+    cl = ChapterList.fromM4bFile(in_file)
+
+    (author, title, trackTitle) = getMetaData(in_file)
+    # Usually only one art file
+    art_files = getCoverArt(in_file)
+
+    # adjust the chapters and save out to file
+    cl.adjustTempo(float(tempo))
+    chapter_txt = basename + ".chapters.txt"
+    cl.toFile(chapter_txt)
+
+    # Re-encode
+    combineAndEncode(audio_file, [in_file], ffmpeg_input_format_options, tempo)
+
+    # Set the metadata
+    setChapters(audio_file, chapter_txt)
+    os.unlink(chapter_txt)
+    setMetaData(audio_file, author, title, trackTitle)
+    # Don't fail of no coverart found
+    if len(art_files) > 0:
+        setCoverArt(audio_file, art_files[0])
+        os.unlink(art_files[0])
     optimizeMp4(audio_file)
 
     print "Success!"
@@ -819,6 +902,7 @@ def usage():
   optimize            <AudioBook.m4b>
 
   m4b_from_files      <AudioBook.m4b> <Author> <Title> <coverart image> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo <float ratio>]
+  set_m4b_tempo       <AudioBook.m4b> <Original.m4b> [--ffmpeg_input_format_options="options"] <tempo float ratio>
 
 """
     print usage_text
@@ -1018,6 +1102,23 @@ if __name__ == "__main__":
             sys.exit(1)
 
         m4bFromFiles(audio_file, author, title, art_file, in_files, ffmpeg_input_format_options, tempo)
+
+    elif 'set_m4b_tempo' == subcommand:
+
+        # Parse the options
+        ffmpeg_input_format_options = ""
+        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", [ "ffmpeg_input_format_options=" ])
+        for option, value in opts:
+            if option == "--ffmpeg_input_format_options":
+                ffmpeg_input_format_options = value
+
+        try:
+            (audio_file, in_file, tempo) = subcommand_args
+        except:
+            usage()
+            sys.exit(1)
+
+        setM4bTempo(audio_file, in_file, ffmpeg_input_format_options, tempo)
 
     else:
         usage()

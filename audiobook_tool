@@ -79,6 +79,12 @@ class WavConversionError(Exception):
     def __str__(self):
         return repr(self.value)
 
+class ChapterListFormatError(Exception):
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
+
 def lengthInSecondsTagLib(file):
     # Need a way to get the length of a file.  exiftool works,
     # Maybe tagpy as well...
@@ -266,7 +272,11 @@ class Chapter:
     def fromLine(cls, line):
         """Factory method for creating a chapter based on the text format"""
 
-        (hours, minutes, seconds, milliseconds, chapter_name) = chapter_line_re.search(line).groups()
+        try:
+            (hours, minutes, seconds, milliseconds, chapter_name) = chapter_line_re.search(line).groups()
+        except AttributeError:
+            print "Error: unrecognizable chapter line: " + line
+            raise ChapterListFormatError
         total_seconds = totalSeconds(hours, minutes, seconds, milliseconds)
 
         obj = cls(total_seconds, chapter_name)
@@ -676,7 +686,12 @@ def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
     exitIfMissing(chapter_txt)
     exitIfMissing(audio_file)
 
-    cl = ChapterList.fromFile(chapter_txt)
+    try:
+        cl = ChapterList.fromFile(chapter_txt)
+    except:
+        print "Error: unable to parse chapter list: " + chapter_txt
+        sys.exit(1)
+
     chaps = []
     if not chapter_index:
         chaps.extend(range(1, cl.size() + 1))

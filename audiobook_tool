@@ -633,7 +633,7 @@ def combineAndEncode(output, in_files, ffmpeg_input_options="", tempo="1.0"):
     output_extension = os.path.splitext(output)[1]
 
     if not ffmpeg_output_profiles.has_key(output_extension):
-        print "Error: unknown resulting file format: " + output_extension
+        print "Error: '%s' is of unknown resulting file format: %s" % (output, output_extension)
         sys.exit(1)
 
     # Pick ffmpeg output parameters based on output filetype
@@ -843,11 +843,13 @@ def m4bFromFiles(audio_file, author, title, art_file, in_files, ffmpeg_input_for
     # Get the chapter name
     chapter_txt = os.path.splitext(audio_file)[0] + ".chapters.txt"
 
+    # Do this option first since it will catch the error of invalid resulting extension.
+    # Otherwise, all the chapters are generated, which takes some time, only to fail on this step
+    combineAndEncode(audio_file, in_files, ffmpeg_input_format_options, tempo)
+
     cl = genChapterList(in_files, chapter_txt, tempo)
 
     # TODO: break up the chapter lists and combining/encoding if it exceeds the m4b max sample count
-
-    combineAndEncode(audio_file, in_files, ffmpeg_input_format_options, tempo)
 
     setChapters(audio_file, chapter_txt)
     setMetaData(audio_file, author, title)

@@ -471,8 +471,8 @@ def getCdTrackList(cd_device, track_count_offset):
         print "Warning: failed to connect internet database... using generic track names"
         lookup_successful = False
     except ValueError:
-        print "Error: invalid cddb response, exiting..."
-        sys.exit(1)
+        print "Warning: invalid cddb response... using generic track names"
+        lookup_successful = False
 
     # Populate a structure of lists to return to the user
     # (may be extended if more info is needed from the cddb lookup)

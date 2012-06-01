@@ -189,7 +189,7 @@ def lengthInSecondsFFmpeg(file, tempo="1.0"):
     #  Note: have sox write out to stdout, and count with wc.  Should be accurate, as ffmpeg is doing the decoding
     if tempo != "1.0":
         sox_cmd = "sox -L -t s16 -r %s -c %s - -t s16 -r %s -c %s - tempo %s 30" % (output_rate, output_channels, output_rate, output_channels, tempo)
-        command = "%s | %s | %s" % (ffmpeg_decode_cmd, sox_cmd, wc_cmd)
+        command = "%s | %s 2>/dev/null | %s" % (ffmpeg_decode_cmd, sox_cmd, wc_cmd)
 
     # Normal decode without the sox pipe
     else:
@@ -201,7 +201,14 @@ def lengthInSecondsFFmpeg(file, tempo="1.0"):
         print output
         raise WavConversionError("Unable to convert file to .wav: " + file)
 
-    return float(output)/(float(output_rate)*float(output_channels)*2.0) # 2 because 16 bits per sample, or 2 bytes per sample
+    # put this in a try block to help catch invalid output
+    try:
+        results = float(output)/(float(output_rate)*float(output_channels)*2.0) # 2 because 16 bits per sample, or 2 bytes per sample
+    except:
+        print "Command: " + command
+        print "Output: " + output
+        raise WavConversionError("Unable to convert file to .wav: " + file)
+    return results
 
 # Interesting bits:
 #Sample Rate    : 22050

@@ -9,6 +9,8 @@
 
 ####################################################
 # ffmpeg output settings for combine_and_encode
+ffmpeg_program="ffmpeg"
+#ffmpeg_program="mythffmpeg"
 output_bitrate="32000"
 output_rate="22050"
 output_channels="1"
@@ -27,7 +29,7 @@ ffmpeg_output_profiles = {
 ####################################################
 # external programs this program depends on
 cmd_line_dependencies = {
-        'ffmpeg': '',
+        ffmpeg_program: '',
         #'ffplay': '',
         'mplayer': '',
         'mp4chaps': '',
@@ -161,11 +163,11 @@ def convertToWavFFmpeg(file, tempo="1.0"):
     if tempo != "1.0":
         sox_cmd = "sox -L -t s16 -r %s -c %s - %s tempo %s 30" % (output_rate, output_channels, shellQuote(wavFile), tempo)
         intermediate_format_options = "-ar %s -ac %s -f s16le" % (output_rate, output_channels)
-        command = "ffmpeg -v 0 -y %s /dev/stdout -i %s | %s" % (intermediate_format_options, shellQuote(file), sox_cmd)
+        command = "%s -v 0 -y %s /dev/stdout -i %s | %s" % (ffmpeg_program, intermediate_format_options, shellQuote(file), sox_cmd)
 
     # Normal conversion without the sox pipe
     else:
-        command = "ffmpeg -y -i %s -f wav %s" % (shellQuote(file), shellQuote(wavFile))
+        command = "%s -y -i %s -f wav %s" % (ffmpeg_program, shellQuote(file), shellQuote(wavFile))
 
     # Convert it if we haven't done so already
     if not os.path.exists(wavFile):
@@ -184,7 +186,7 @@ def lengthInSecondsFFmpeg(file, tempo="1.0"):
     """
 
     wc_cmd = "wc --bytes"
-    ffmpeg_decode_cmd = "ffmpeg -v 0 -y -i %s -acodec pcm_s16le -f s16le -ar %s -ac %s /dev/stdout 2>/dev/null" % (shellQuote(file), output_rate, output_channels)
+    ffmpeg_decode_cmd = "%s -v 0 -y -i %s -acodec pcm_s16le -f s16le -ar %s -ac %s /dev/stdout 2>/dev/null" % (ffmpeg_program, shellQuote(file), output_rate, output_channels)
     # Run through a sox pipe if we want to change the tempo
     #  Note: have sox write out to stdout, and count with wc.  Should be accurate, as ffmpeg is doing the decoding
     if tempo != "1.0":
@@ -662,11 +664,11 @@ def combineAndEncode(output, in_files, ffmpeg_input_options="", tempo="1.0"):
     intermediate_format_options = "-ar %s -ac %s -f s16le" % (output_rate, output_channels)
     # TODO: gather length by converting to a wav, getting the size via sox, piping with ffmpeg, and then cleaning up the wav file?
     #  that "could" be faster overall, even though it would slow down this step (writing each wav file to disc)
-    player_command = "for i in %s ; do echo \"Encoding $i\" >&2; ffmpeg -v 0 -y %s /dev/stdout %s -i \"$i\" 2>/dev/null || { echo '' >&2; echo \"****** Failed to decode $i ******\" >&2 ; echo '' >&2 ; touch %s ; exit 1 ; } ; done""" % (buildFilesString(in_files), intermediate_format_options, ffmpeg_input_options, shellQuote(error_filename))
+    player_command = "for i in %s ; do echo \"Encoding $i\" >&2; %s -v 0 -y %s /dev/stdout %s -i \"$i\" 2>/dev/null || { echo '' >&2; echo \"****** Failed to decode $i ******\" >&2 ; echo '' >&2 ; touch %s ; exit 1 ; } ; done""" % (buildFilesString(in_files), ffmpeg_program, intermediate_format_options, ffmpeg_input_options, shellQuote(error_filename))
 
     # Now run the command to convert all data coming from stdin
     output_format_options = "-acodec %s -ar %s -ab %s -ac %s -f %s" % (output_codec, output_rate, output_bitrate, output_channels, output_format)
-    runOrDie("rm -f %s ; ( %s ) %s | ffmpeg -v 0 -y %s -i /dev/stdin %s %s 2>/dev/null" % (shellQuote(error_filename), player_command, sox_pipe, intermediate_format_options, output_format_options, shellQuote(output)), error_message="Encoding failed")
+    runOrDie("rm -f %s ; ( %s ) %s | %s -v 0 -y %s -i /dev/stdin %s %s 2>/dev/null" % (shellQuote(error_filename), player_command, sox_pipe, ffmpeg_program, intermediate_format_options, output_format_options, shellQuote(output)), error_message="Encoding failed")
 
     if os.path.exists(error_filename):
         print ""
@@ -681,6 +683,8 @@ def combineAndEncode(output, in_files, ffmpeg_input_options="", tempo="1.0"):
         print "  ie: mplayer <file unreadable by ffmpeg> -ao pcm:file=tmp.wav; ffmpeg -y -i tmp.wav -f wav out.wav"
         print ""
         print "  Doing the second conversion with ffmpeg probably won't make a difference except for the paranoid"
+        print ""
+        print "Suggestion 3: Use mythffmpeg instead of ffmpeg by adjusting ffmpeg_program at the top of this file"
         print ""
         os.unlink(error_filename)
         sys.exit(1)

@@ -53,11 +53,14 @@ import re
 import time
 import shutil
 import getopt
-import CDDB
-import DiscID
 import glob
-
 import commands
+
+try:
+	import DiscID
+	import CDDB
+except:
+	print("Warning: missing CDDB or DiscID support")
 
 try:
     # Keep tagpy code around for reference, but don't require it

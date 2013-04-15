@@ -24,6 +24,8 @@ null_pipe="2>/dev/null"
 #  This program is focused on m4b,
 #   but you can use it to encode to mp3/ogg and/or other ffmpeg codecs
 # For ffmpeg aac notes: http://ffmpeg.org/trac/ffmpeg/wiki/AACEncodingGuide
+# TODO: to support multiple versions of ffmpeg, we'd need to auto detect the aac codec name
+# also, older versions don't support named logging levels (only numbers)
 ffmpeg_output_profiles = {
         '.mp3': { 'codec': 'libmp3lame', 'format': 'mp3', 'options': '' },
         '.m4b': { 'codec': 'aac',        'format': 'mp4', 'options': '-strict experimental -cutoff 15000' },

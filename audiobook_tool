@@ -10,18 +10,24 @@
 ####################################################
 # ffmpeg output settings for combine_and_encode
 ffmpeg_program="ffmpeg"
-#ffmpeg_program="mythffmpeg"
 output_bitrate="32000"
 output_rate="22050"
 output_channels="1"
 
+ffmpeg_verbosity="-v warning"
+# avconv's logging levels don't work, but ffmpeg's do.
+# When the logging levels work, the null_pipe isn't needed and warnings
+# are more apparent.
+null_pipe="2>/dev/null"
+
 # ffmpeg profiles
 #  This program is focused on m4b,
 #   but you can use it to encode to mp3/ogg and/or other ffmpeg codecs
+# For ffmpeg aac notes: http://ffmpeg.org/trac/ffmpeg/wiki/AACEncodingGuide
 ffmpeg_output_profiles = {
-        '.mp3': { 'codec': 'libmp3lame', 'format': 'mp3' },
-        '.m4b': { 'codec': 'libvo_aacenc', 'format': 'mp4' },
-        '.ogg': { 'codec': 'libvorbis',  'format': 'ogg' },
+        '.mp3': { 'codec': 'libmp3lame', 'format': 'mp3', 'options': '' },
+        '.m4b': { 'codec': 'aac',        'format': 'mp4', 'options': '-strict experimental -cutoff 15000' },
+        '.ogg': { 'codec': 'libvorbis',  'format': 'ogg', 'options': '' },
         }
 #
 ####################################################
@@ -166,7 +172,7 @@ def convertToWavFFmpeg(file, tempo="1.0"):
     if tempo != "1.0":
         sox_cmd = "sox -L -t s2 -r %s -c %s - %s tempo %s 30" % (output_rate, output_channels, shellQuote(wavFile), tempo)
         intermediate_format_options = "-ar %s -ac %s -f s16le" % (output_rate, output_channels)
-        command = "%s -v 0 -y -i %s %s - | %s" % (ffmpeg_program, shellQuote(file), intermediate_format_options, sox_cmd)
+        command = "%s %s -y -i %s %s - | %s" % (ffmpeg_program, ffmpeg_verbosity, shellQuote(file), intermediate_format_options, sox_cmd)
 
     # Normal conversion without the sox pipe
     else:
@@ -189,7 +195,7 @@ def lengthInSecondsFFmpeg(file, tempo="1.0"):
     """
 
     wc_cmd = "wc --bytes"
-    ffmpeg_decode_cmd = "%s -v 0 -y -i %s -acodec pcm_s16le -f s16le -ar %s -ac %s - 2>/dev/null" % (ffmpeg_program, shellQuote(file), output_rate, output_channels)
+    ffmpeg_decode_cmd = "%s %s -y -i %s -acodec pcm_s16le -f s16le -ar %s -ac %s - %s" % (ffmpeg_program, ffmpeg_verbosity, shellQuote(file), output_rate, output_channels, null_pipe)
     # Run through a sox pipe if we want to change the tempo
     #  Note: have sox write out to stdout, and count with wc.  Should be accurate, as ffmpeg is doing the decoding
     if tempo != "1.0":
@@ -650,6 +656,7 @@ def combineAndEncode(output, in_files, ffmpeg_input_options="", tempo="1.0"):
 
     # Pick ffmpeg output parameters based on output filetype
     output_codec = ffmpeg_output_profiles[output_extension]['codec']
+    codec_options = ffmpeg_output_profiles[output_extension]['options']
     output_format = ffmpeg_output_profiles[output_extension]['format']
 
     error_filename = "/tmp/audiobook_tool_error.%s" % os.getpid()
@@ -667,11 +674,11 @@ def combineAndEncode(output, in_files, ffmpeg_input_options="", tempo="1.0"):
     intermediate_format_options = "-ar %s -ac %s -f s16le" % (output_rate, output_channels)
     # TODO: gather length by converting to a wav, getting the size via sox, piping with ffmpeg, and then cleaning up the wav file?
     #  that "could" be faster overall, even though it would slow down this step (writing each wav file to disc)
-    player_command = "for i in %s ; do echo \"Encoding $i\" >&2; %s -v 0 -y -i \"$i\" %s %s - 2>/dev/null || { echo '' >&2; echo \"****** Failed to decode $i ******\" >&2 ; echo '' >&2 ; touch %s ; exit 1 ; } ; done""" % (buildFilesString(in_files), ffmpeg_program, ffmpeg_input_options, intermediate_format_options, shellQuote(error_filename))
+    player_command = "for i in %s ; do echo \"Encoding $i\" >&2; %s %s -y -i \"$i\" %s %s - %s || { echo '' >&2; echo \"****** Failed to decode $i ******\" >&2 ; echo '' >&2 ; touch %s ; exit 1 ; } ; done""" % (buildFilesString(in_files), ffmpeg_program, ffmpeg_verbosity, ffmpeg_input_options, intermediate_format_options, null_pipe, shellQuote(error_filename))
 
     # Now run the command to convert all data coming from stdin
-    output_format_options = "-acodec %s -ar %s -ab %s -ac %s -f %s" % (output_codec, output_rate, output_bitrate, output_channels, output_format)
-    runOrDie("rm -f %s ; ( %s ) %s | %s -v 0 -y %s -i - %s %s 2>/dev/null" % (shellQuote(error_filename), player_command, sox_pipe, ffmpeg_program, intermediate_format_options, output_format_options, shellQuote(output)), error_message="Encoding failed")
+    output_format_options = "-acodec %s %s -ar %s -ab %s -ac %s -f %s" % (output_codec, codec_options, output_rate, output_bitrate, output_channels, output_format)
+    runOrDie("rm -f %s ; ( %s ) %s | %s %s -y %s -i - %s %s %s" % (shellQuote(error_filename), player_command, sox_pipe, ffmpeg_program, ffmpeg_verbosity, intermediate_format_options, output_format_options, shellQuote(output), null_pipe), error_message="Encoding failed")
 
     if os.path.exists(error_filename):
         print ""

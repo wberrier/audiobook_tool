@@ -750,6 +750,16 @@ def adjustChapter(chapter_txt, chapter_index, seconds, cascade):
 
     cl.toFile(chapter_txt)
 
+def setChapterTempo(chapter_txt, tempo):
+
+    exitIfMissing(chapter_txt)
+
+    cl = ChapterList.fromFile(chapter_txt)
+
+    cl.adjustTempo(tempo)
+
+    cl.toFile(chapter_txt)
+
 def setChapters(audio_file, chapter_txt):
 
     # mp4v2 seems to break when there are 2 chapters in a row with the same timestamp.
@@ -934,6 +944,7 @@ def usage():
   gen_chapter_list    <AudioBook.chapters.txt> <audio files> [--tempo <float ratio>]
   play_chapter        <AudioBook.chapters.txt> <AudioBook.m4b> [chapter range [offset]]  (range e.g. "7" or "1-3,6,8-10")
   adjust_chapter      <AudioBook.chapters.txt> <chapter index> [--cascade] <[-]seconds>
+  set_chapter_tempo   <AudioBook.chapters.txt> <float ratio>
 
   set_chapters        <AudioBook.m4b> <AudioBook.chapters.txt>
   get_chapters        <AudioBook.m4b> <AudioBook.chapters.txt>
@@ -1067,6 +1078,17 @@ if __name__ == "__main__":
             sys.exit(1)
 
         adjustChapter(chapter_txt, chapter_index, seconds, cascade)
+
+    elif 'set_chapter_tempo' == subcommand:
+
+        try:
+            (chapter_txt, tempo) = subcommand_args
+            tempo = float(tempo)
+        except:
+            usage()
+            sys.exit(1)
+
+        setChapterTempo(chapter_txt, tempo)
 
     elif 'set_chapters' == subcommand:
         try:

@@ -929,7 +929,7 @@ def validateDependencies(progs):
 
     for p in progs:
         (status, output) = commands.getstatusoutput("which " + p)
-        if len(output) == 0:
+        if status != 0:
             print "Warning: %s not found" % p
 
 def usage():

@@ -98,97 +98,6 @@ class ChapterListFormatError(Exception):
     def __str__(self):
         return repr(self.value)
 
-def lengthInSecondsTagLib(file):
-    # Need a way to get the length of a file.  exiftool works,
-    # Maybe tagpy as well...
-    # But both only give resolution down to the second... arg
-    # -> this method doesn't work on wav files
-
-    # Hrm... taglib doesn't give milliseconds... does that matter?
-    # Wow, looks like the id3 tag can specify milliseconds, bu the taglib api only reports integers?  Ugh...
-
-    if not have_tagpy:
-        raise LengthRetrievalError("tagpy not available")
-
-    try:
-        f = tagpy.FileRef(file)
-        seconds = f.audioProperties().length
-    except:
-        raise LengthRetrievalError("tagpy: unknown file type")
-
-    # Sometimes library says there's invalid sample rates... yet upon printing them, they seem fine.  What gives?
-    #print "Sample rate: " + str(f.audioProperties().sampleRate)
-    return float(seconds)
-
-def convertToWavMplayer(file):
-    """Returns new wav file, which the user is responsible for cleaning up"""
-
-    wavFile = file + ".wav"
-    # Convert it if we haven't done so already
-    if not os.path.exists(wavFile):
-        status, output = commands.getstatusoutput("mplayer %s -ao pcm:file=%s" % (shellQuote(file), shellQuote(wavFile)))
-
-    return wavFile
-
-mplayer_duration_re = re.compile("ID_LENGTH=(.*)")
-def lengthInSecondsMplayer(file):
-    """Will convert non-wav files to wav to get a more accurate reading, but still not as accurate as what ffmpeg reports"""
-    # mplayer method
-
-    convertToWav = False
-    if os.path.splitext(file)[1] != ".wav":
-        convertToWav = True
-
-    if convertToWav:
-        file = convertToWavMplayer(file)
-
-    # This probably reports in milliseconds, since it appears to just get the length
-    # Hacky, yes... but it appears gives us milliseconds
-    #  -> Actually it doesn't seem to give milliseconds
-    status, output = commands.getstatusoutput("mplayer -vo null -ao null -identify -frames 0 %s" % shellQuote(file))
-
-    try:
-        (seconds,) = mplayer_duration_re.search(output, re.MULTILINE).groups()
-    except(AttributeError):
-        raise LengthRetrievalError("Failed to parse: " + output)
-
-    if convertToWav:
-        # Clean up... (much faster to clean up each file than to leave them around (yay kernel disk cache))
-        os.unlink(file)
-
-    # str->float
-    return float(seconds)
-
-def convertToWavFFmpeg(file, tempo="1.0"):
-    """Returns new wav file, which the user is responsible for cleaning up
-
-    Optionally takes a tempo arg, in which the file is first run through a sox pipe
-
-    """
-
-    # Store the tempo in the filename for correct caching purposes
-    wavFile = file + "_" + tempo + ".wav"
-
-    # Run through a sox pipe if we want to change the tempo
-    #  Note: have sox write out the wav file, should be accurate, as ffmpeg is doing the decoding
-    if tempo != "1.0":
-        sox_cmd = "sox -L -t s2 -r %s -c %s - %s tempo %s 30" % (output_rate, output_channels, shellQuote(wavFile), tempo)
-        intermediate_format_options = "-ar %s -ac %s -f s16le" % (output_rate, output_channels)
-        command = "%s %s -y -i %s %s - | %s" % (ffmpeg_program, ffmpeg_verbosity, shellQuote(file), intermediate_format_options, sox_cmd)
-
-    # Normal conversion without the sox pipe
-    else:
-        command = "%s -y -i %s -f wav %s" % (ffmpeg_program, shellQuote(file), shellQuote(wavFile))
-
-    # Convert it if we haven't done so already
-    if not os.path.exists(wavFile):
-        status, output = commands.getstatusoutput(command)
-        if status:
-            print output
-            raise WavConversionError("Unable to convert file to .wav: " + file)
-
-    return wavFile
-
 def lengthInSecondsFFmpeg(file, tempo="1.0"):
     """Decode input using ffmpeg to determine the length of the input
 
@@ -421,11 +330,6 @@ class ChapterList:
 
         try:
             # Update the cumalative time
-            # These give different results!  Interesting...  Wonder which one is accurate?
-            #  We'll probably need manual adjustment, so maybe it doesn't matter
-            #self.currentTimeMark += lengthInSecondsMplayer(filename)
-            #self.currentTimeMark += lengthInSecondsTagLib(filename)
-            #self.currentTimeMark += lengthInSecondsFFplay(filename)
             self.currentTimeMark += lengthInSecondsSoxi(filename, tempo)
         except(LengthRetrievalError):
             print "Error reading file: " + filename

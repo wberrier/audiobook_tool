@@ -199,19 +199,6 @@ class Chapter:
         self.timeMark = timeMark
         self.name = name
 
-    @classmethod
-    def fromExportedLine(cls, line):
-        """
-        Factory method for creating a chapter based on the exported text format from mp4chap
-        Chapter #030 - 19:00:40.111 - "Chapter 30"
-        """
-
-        (hours, minutes, seconds, milliseconds, chapter_name) = mp4chap_exported_chapter_line_re.search(line).groups()
-        total_seconds = totalSeconds(hours, minutes, seconds, milliseconds)
-
-        obj = cls(total_seconds, chapter_name)
-        return obj
-
     def adjustTempo(self, tempo):
         """Compute new chapter mark based on new tempo"""
         self.timeMark /= float(tempo)
@@ -237,10 +224,6 @@ class M4bChapter(Chapter):
     def __init__(self, index, timeMark, name):
         Chapter.__init__(self, index, timeMark, name)
 
-        # This is the format given from mp4chap
-        # Example: Chapter #030 - 19:00:40.111 - "Chapter 30"
-        self.exported_chapter_line_re = re.compile("\tChapter #\d\d\d - (\d\d):(\d\d):(\d\d).(\d\d\d) - \"(.*)\"")
-
     def toString(self):
         return "%s %s" % (self.timeString(), self.name)
 
@@ -248,10 +231,6 @@ class M4bChapter(Chapter):
 class MkaChapter(Chapter):
     def __init__(self, index, timeMark, name):
         Chapter.__init__(self, index, timeMark, name)
-
-        # This is the format given from mp4chap
-        # Example: Chapter #030 - 19:00:40.111 - "Chapter 30"
-        self.exported_chapter_line_re = re.compile("\tChapter #\d\d\d - (\d\d):(\d\d):(\d\d).(\d\d\d) - \"(.*)\"")
 
     def toString(self):
         # self.index is zero based, but matroska chapters are 1 based
@@ -272,29 +251,6 @@ class ChapterList:
     def __init__(self):
         self.chapters = []
         self.currentTimeMark = 0.0
-
-    @classmethod
-    def fromM4bFile(cls, filename):
-        """Export chapters via mp4chaps and format to the expected import format"""
-
-        obj = cls()
-
-        no_chapters_re = re.compile("File .* does not contain chapters of type QuickTime and Nero")
-
-        (status, output) = commands.getstatusoutput("mp4chaps --list %s" % shellQuote(filename))
-
-        # Check for empty chapter
-        if no_chapters_re.search(output):
-            return obj
-
-        count = -1
-        for line in output.split("\n"):
-            count += 1
-            if count == 0:
-                continue
-            obj.addChapter(Chapter.fromExportedLine(line))
-
-        return obj
 
     def getChapter(self, chapterIndex):
         if not (chapterIndex > 0 and chapterIndex <= len(self.chapters)):
@@ -367,20 +323,26 @@ class ChapterList:
         fd.write(self.toString())
         fd.close()
 
+    def populateFromChapterFile(self, filename):
+
+        # TODO: handle errors?
+        output = open(filename).read()
+
+        self.populateFromChapterOutput(output)
+
 
 class M4bChapterList(ChapterList):
     def __init__(self):
         ChapterList.__init__(self)
         self.chapter_type = M4bChapter
 
-    def populateFromChapterFile(self, filename):
-        """Parse filename to populate the chapter info"""
+    def populateFromChapterOutput(self, output):
+        """Parse output to populate the chapter info"""
 
         chapter_line_re = re.compile("(\d\d):(\d\d):(\d\d).(\d\d\d) (.*)")
 
         count = 0
-        fd = open(filename)
-        for line in fd.readlines():
+        for line in output.split('\n'):
 
             try:
                 (hours, minutes, seconds, milliseconds, chapter_name) = chapter_line_re.search(line).groups()
@@ -395,7 +357,35 @@ class M4bChapterList(ChapterList):
 
             count = count + 1
 
-        fd.close()
+
+    def populateFromAudioFile(self, filename):
+        """ Specialied method """
+
+        no_chapters_re = re.compile("File .* does not contain chapters of type QuickTime and Nero")
+
+        # TODO: mp4chaps actually supports "--export" to do this thing
+        (status, output) = commands.getstatusoutput("mp4chaps --list %s" % shellQuote(filename))
+
+        # Check for empty chapter
+        if no_chapters_re.search(output):
+            return
+
+        # This is the format given from mp4chap
+        # Example: Chapter #030 - 19:00:40.111 - "Chapter 30"
+        exported_chapter_line_re = re.compile("\tChapter #\d\d\d - (\d\d):(\d\d):(\d\d).(\d\d\d) - \"(.*)\"")
+
+        # Skip first line
+        count = -1
+        for line in output.split("\n"):
+            count += 1
+            if count == 0:
+                continue
+
+            (hours, minutes, seconds, milliseconds, chapter_name) = exported_chapter_line_re.search(line).groups()
+            total_seconds = totalSeconds(hours, minutes, seconds, milliseconds)
+
+            self.addChapter(self.chapter_type(count, total_seconds, chapter_name))
+
 
 
 class MkaChapterList(ChapterList):
@@ -403,7 +393,7 @@ class MkaChapterList(ChapterList):
         ChapterList.__init__(self)
         self.chapter_type = MkaChapter
 
-    def populateFromChapterFile(self, filename):
+    def populateFromChapterOutput(self, output):
         """Parse filename to populate the chapter info"""
 
         # time or name
@@ -412,8 +402,7 @@ class MkaChapterList(ChapterList):
         total_seconds = 0
 
         count = 1
-        fd = open(filename)
-        for line in fd.readlines():
+        for line in output.split('\n'):
 
             index_str = "%02d" % count
 
@@ -450,7 +439,15 @@ class MkaChapterList(ChapterList):
 
                 count = count + 1
 
-        fd.close()
+
+    def populateFromAudioFile(self, filename):
+        """ Specialied method """
+
+        no_chapters_re = re.compile("File .* does not contain chapters of type QuickTime and Nero")
+
+        (status, output) = commands.getstatusoutput("mkvextract chapters %s -s" % shellQuote(filename))
+
+        self.populateFromChapterOutput(output)
 
 
 def AudioBookFactory(filename):
@@ -809,10 +806,20 @@ class AudioBook:
         exitIfMissing(self.audio_file)
         exitIfMissing(chapter_txt)
 
+    def getChapters(self):
+        exitIfMissing(self.audio_file)
+
+        cl = self.chapter_list_type()
+
+        cl.populateFromAudioFile(self.audio_file)
+
+        return cl
+
 
 class M4bAudioBook(AudioBook):
     def __init__(self, audio_file):
         AudioBook.__init__(self, audio_file)
+        self.chapter_list_type = M4bChapterList
 
     def setChapters(self, chapter_txt):
 
@@ -845,6 +852,7 @@ class M4bAudioBook(AudioBook):
 class MkaAudioBook(AudioBook):
     def __init__(self, audio_file):
         AudioBook.__init__(self, audio_file)
+        self.chapter_list_type = MkaChapterList
 
     def setChapters(self, chapter_txt):
 
@@ -853,14 +861,6 @@ class MkaAudioBook(AudioBook):
         # Inject chapters
         runOrDie("mkvpropedit %s --chapters %s" % (shellQuote(self.audio_file), shellQuote(chapter_txt)))
 
-
-def getChapters(audio_file, chapter_txt):
-
-    exitIfMissing(audio_file)
-
-    cl = ChapterList.fromM4bFile(audio_file)
-
-    cl.toFile(chapter_txt)
 
 def setMetaData(audio_file, author, title, trackTitle=""):
 
@@ -1012,7 +1012,7 @@ def usage():
   set_chapter_tempo   <AudioBook.chapters.txt> <float ratio> [--format=[m4b|mka]]
 
   set_chapters        <AudioBook.[m4b|mka]> <AudioBook.chapters.txt>
-  get_chapters        <AudioBook.m4b> <AudioBook.chapters.txt>
+  get_chapters        <AudioBook.[m4b|mka]> <AudioBook.chapters.txt>
   set_metadata        <AudioBook.m4b> <Author> <Title> [Track Title]
   set_coverart        <AudioBook.m4b> <coverart image>
   optimize            <AudioBook.m4b>
@@ -1188,7 +1188,12 @@ if __name__ == "__main__":
             usage()
             sys.exit(1)
 
-        getChapters(audio_file, chapter_txt)
+        book = AudioBookFactory(audio_file)
+
+        cl = book.getChapters()
+
+        cl.toFile(chapter_txt)
+
 
     elif 'set_metadata' == subcommand:
         # Get optional offset

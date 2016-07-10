@@ -200,20 +200,6 @@ class Chapter:
         self.name = name
 
     @classmethod
-    def fromLine(cls, line):
-        """Factory method for creating a chapter based on the text format"""
-
-        try:
-            (hours, minutes, seconds, milliseconds, chapter_name) = chapter_line_re.search(line).groups()
-        except AttributeError:
-            print "Error: unrecognizable chapter line: " + line
-            raise ChapterListFormatError
-        total_seconds = totalSeconds(hours, minutes, seconds, milliseconds)
-
-        obj = cls(total_seconds, chapter_name)
-        return obj
-
-    @classmethod
     def fromExportedLine(cls, line):
         """
         Factory method for creating a chapter based on the exported text format from mp4chap
@@ -251,8 +237,6 @@ class M4bChapter(Chapter):
     def __init__(self, index, timeMark, name):
         Chapter.__init__(self, index, timeMark, name)
 
-        self.chapter_line_re = re.compile("(\d\d):(\d\d):(\d\d).(\d\d\d) (.*)")
-
         # This is the format given from mp4chap
         # Example: Chapter #030 - 19:00:40.111 - "Chapter 30"
         self.exported_chapter_line_re = re.compile("\tChapter #\d\d\d - (\d\d):(\d\d):(\d\d).(\d\d\d) - \"(.*)\"")
@@ -264,8 +248,6 @@ class M4bChapter(Chapter):
 class MkaChapter(Chapter):
     def __init__(self, index, timeMark, name):
         Chapter.__init__(self, index, timeMark, name)
-
-        self.chapter_line_re = re.compile("(\d\d):(\d\d):(\d\d).(\d\d\d) (.*)")
 
         # This is the format given from mp4chap
         # Example: Chapter #030 - 19:00:40.111 - "Chapter 30"
@@ -290,19 +272,6 @@ class ChapterList:
     def __init__(self):
         self.chapters = []
         self.currentTimeMark = 0.0
-
-    @classmethod
-    def fromFile(cls, filename):
-        """Parse filename to populate the chapter info"""
-
-        obj = cls()
-
-        fd = open(filename)
-        for line in fd.readlines():
-            obj.addChapter(Chapter.fromLine(line))
-        fd.close()
-
-        return obj
 
     @classmethod
     def fromM4bFile(cls, filename):
@@ -404,20 +373,106 @@ class M4bChapterList(ChapterList):
         ChapterList.__init__(self)
         self.chapter_type = M4bChapter
 
+    def populateFromChapterFile(self, filename):
+        """Parse filename to populate the chapter info"""
+
+        chapter_line_re = re.compile("(\d\d):(\d\d):(\d\d).(\d\d\d) (.*)")
+
+        count = 0
+        fd = open(filename)
+        for line in fd.readlines():
+
+            try:
+                (hours, minutes, seconds, milliseconds, chapter_name) = chapter_line_re.search(line).groups()
+            except AttributeError:
+                error = "Error: unrecognizable chapter line: " + line
+                print error
+                raise ChapterListFormatError(error)
+
+            total_seconds = totalSeconds(hours, minutes, seconds, milliseconds)
+
+            self.addChapter(self.chapter_type(count, total_seconds, chapter_name))
+
+            count = count + 1
+
+        fd.close()
+
+
 class MkaChapterList(ChapterList):
     def __init__(self):
         ChapterList.__init__(self)
         self.chapter_type = MkaChapter
 
-def ChapterListFactory(chapter_format):
+    def populateFromChapterFile(self, filename):
+        """Parse filename to populate the chapter info"""
+
+        # time or name
+        line_type = "time"
+
+        total_seconds = 0
+
+        count = 1
+        fd = open(filename)
+        for line in fd.readlines():
+
+            index_str = "%02d" % count
+
+            chapter_line_time_re = re.compile("CHAPTER%s=(\d\d):(\d\d):(\d\d).(\d\d\d)" % index_str)
+            chapter_line_name_re = re.compile("CHAPTER%s=(.*)" % index_str)
+
+            if line_type == "time":
+
+                try:
+                    (hours, minutes, seconds, milliseconds) = chapter_line_time_re.search(line).groups()
+                except AttributeError:
+                    error = "Error: unrecognizable chapter line: " + line
+                    print error
+                    raise ChapterListFormatError(error)
+
+                total_seconds = totalSeconds(hours, minutes, seconds, milliseconds)
+
+                # get ready for next line
+                line_type = "name"
+
+            elif line_type == "name":
+
+                try:
+                    (chapter_name,) = chapter_line_name_re.search(line).groups()
+                except AttributeError:
+                    error = "Error: unrecognizable chapter line: " + line
+                    print error
+                    raise ChapterListFormatError(error)
+
+                # The chapter file uses one based, the object is zero based
+                self.addChapter(self.chapter_type(count-1, total_seconds, chapter_name))
+
+                line_type = "time"
+
+                count = count + 1
+
+        fd.close()
+
+def ChapterListFactory(chapter_format="", filename=""):
     """Get the appropriate chapter object for the format"""
-    if chapter_format == "m4b":
-        return M4bChapterList()
-    elif chapter_format == "mka":
-        return MkaChapterList()
-    else:
-        print "Unsupported chapter type: " + chapter_format
-        sys.exit(1)
+
+    # Get format from filename
+    if filename != "":
+        # filename overrides the format
+        filename, dot_extension = os.path.splitext(filename)
+        if len(dot_extension) > 0 and dot_extension[0] == ".":
+            chapter_format = dot_extension[1:]
+        else:
+            print "Unable to deduce chapter type from file: " + filename
+            sys.exit(1)
+
+    if chapter_format != "":
+        if chapter_format == "m4b":
+            return M4bChapterList()
+        elif chapter_format == "mka":
+            return MkaChapterList()
+        else:
+            print "Unsupported chapter type: " + chapter_format
+            sys.exit(1)
 
 
 def getCdTrackList(cd_device, track_count_offset):
@@ -555,7 +610,7 @@ def genChapterList(files, chapter_format, out_file="", tempo="1.0"):
     # sort the files, just in case
     files.sort()
 
-    cl = ChapterListFactory(chapter_format)
+    cl = ChapterListFactory(chapter_format=chapter_format)
 
     for f in files:
         print "Adding file to chapter list: " + f
@@ -666,8 +721,10 @@ def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
     exitIfMissing(chapter_txt)
     exitIfMissing(audio_file)
 
+    cl = ChapterListFactory(filename=audio_file)
+
     try:
-        cl = ChapterList.fromFile(chapter_txt)
+        cl.populateFromChapterFile(chapter_txt)
     except:
         print "Error: unable to parse chapter list: " + chapter_txt
         sys.exit(1)
@@ -899,7 +956,7 @@ def usage():
   combine_and_encode  <AudioBook.[mp3|m4b|ogg]> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo <float ratio>]
 
   gen_chapter_list    <AudioBook.chapters.txt> <audio files> [--tempo=<float ratio>] [--format=[m4b|mka]]
-  play_chapter        <AudioBook.chapters.txt> <AudioBook.m4b> [chapter range [offset]]  (range e.g. "7" or "1-3,6,8-10")
+  play_chapter        <AudioBook.chapters.txt> <AudioBook.[m4b|mka]> [chapter range [offset]]  (range e.g. "7" or "1-3,6,8-10")
   adjust_chapter      <AudioBook.chapters.txt> <chapter index> [--cascade] <[-]seconds>
   set_chapter_tempo   <AudioBook.chapters.txt> <float ratio>
 

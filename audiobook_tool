@@ -754,11 +754,13 @@ def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
         #runOrDie("ffplay -ss %.3f %s 2>/dev/null" % (chapter.timeMark + offset, shellQuote(audio_file)))
 
 
-def adjustChapter(chapter_txt, chapter_index, seconds, cascade):
+def adjustChapter(chapter_format, chapter_txt, chapter_index, seconds, cascade):
 
     exitIfMissing(chapter_txt)
 
-    cl = ChapterList.fromFile(chapter_txt)
+    cl = ChapterListFactory(chapter_format=chapter_format)
+
+    cl.populateFromChapterFile(chapter_txt)
 
     cl.adjustChapterTimeMark(chapter_index, seconds, cascade)
 
@@ -957,7 +959,7 @@ def usage():
 
   gen_chapter_list    <AudioBook.chapters.txt> <audio files> [--tempo=<float ratio>] [--format=[m4b|mka]]
   play_chapter        <AudioBook.chapters.txt> <AudioBook.[m4b|mka]> [chapter range [offset]]  (range e.g. "7" or "1-3,6,8-10")
-  adjust_chapter      <AudioBook.chapters.txt> <chapter index> [--cascade] <[-]seconds>
+  adjust_chapter      <AudioBook.chapters.txt> <chapter index> [--format=[m4b|mka]] [--cascade] <[-]seconds>
   set_chapter_tempo   <AudioBook.chapters.txt> <float ratio>
 
   set_chapters        <AudioBook.m4b> <AudioBook.chapters.txt>
@@ -1082,10 +1084,14 @@ if __name__ == "__main__":
     elif 'adjust_chapter' == subcommand:
 
         cascade = False
-        for arg in subcommand_args:
-            if arg == "--cascade":
+        chapter_format = "m4b"
+
+        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", [ "cascade", "format=" ])
+        for option, value in opts:
+            if option == "--cascade":
                 cascade = True
-                subcommand_args.remove(arg)
+            if option == "--format":
+                chapter_format = value
 
         try:
             (chapter_txt, chapter_index, seconds) = subcommand_args
@@ -1095,7 +1101,7 @@ if __name__ == "__main__":
             usage()
             sys.exit(1)
 
-        adjustChapter(chapter_txt, chapter_index, seconds, cascade)
+        adjustChapter(chapter_format, chapter_txt, chapter_index, seconds, cascade)
 
     elif 'set_chapter_tempo' == subcommand:
 

@@ -452,6 +452,28 @@ class MkaChapterList(ChapterList):
 
         fd.close()
 
+
+def AudioBookFactory(filename):
+    """Get the appropriate book object for the format"""
+
+    # Get format from filename
+    filename_base, dot_extension = os.path.splitext(filename)
+    if len(dot_extension) > 0 and dot_extension[0] == ".":
+        book_format = dot_extension[1:]
+    else:
+        print "Unable to deduce chapter type from file: " + filename
+        sys.exit(1)
+
+    if book_format != "":
+        if book_format == "m4b":
+            return M4bAudioBook(filename)
+        elif book_format == "mka":
+            return MkaAudioBook(filename)
+        else:
+            print "Unsupported book type: " + book_format
+            sys.exit(1)
+
+
 def ChapterListFactory(chapter_format="", filename=""):
     """Get the appropriate chapter object for the format"""
 
@@ -778,34 +800,59 @@ def setChapterTempo(chapter_format, chapter_txt, tempo):
 
     cl.toFile(chapter_txt)
 
-def setChapters(audio_file, chapter_txt):
 
-    # mp4v2 seems to break when there are 2 chapters in a row with the same timestamp.
-    #  this can be worked around by adding a millisecond difference
-    #  A check should be added to make sure there are no chapters with duplicate timestamps
-    #  -> but, the ipod freaks out from tiny chapters.  Just prepend the chapter with some
-    #  text instead of adding an additional chapter.
+class AudioBook:
+    def __init__(self, audio_file):
+        self.audio_file = audio_file
 
-    exitIfMissing(chapter_txt)
-    exitIfMissing(audio_file)
+    def setChapters(self, chapter_txt):
+        exitIfMissing(self.audio_file)
+        exitIfMissing(chapter_txt)
 
-    # Remove all chapters
-    #  (fails if list doesn't exist... oh well)
-    os.system("mp4chaps --remove %s" % shellQuote(audio_file))
 
-    # Put correct chapter file in place if needs be, and clean up afterwards
-    #  (TODO: if mp4v2 every gets python bindings, we won't have to do this kind of work around)
-    tool_expected_chapter_file = output_extension = os.path.splitext(audio_file)[0] + ".chapters.txt"
-    cleanup = False
-    if tool_expected_chapter_file != chapter_txt:
-        shutil.copyfile(chapter_txt, tool_expected_chapter_file)
-        cleanup = True
+class M4bAudioBook(AudioBook):
+    def __init__(self, audio_file):
+        AudioBook.__init__(self, audio_file)
 
-    # Inject chapters
-    runOrDie("mp4chaps --import %s" % shellQuote(audio_file))
+    def setChapters(self, chapter_txt):
 
-    if cleanup:
-        os.unlink(tool_expected_chapter_file)
+        AudioBook.setChapters(self, chapter_txt)
+
+        # mp4v2 seems to break when there are 2 chapters in a row with the same timestamp.
+        #  this can be worked around by adding a millisecond difference
+        #  A check should be added to make sure there are no chapters with duplicate timestamps
+        #  -> but, the ipod freaks out from tiny chapters.  Just prepend the chapter with some
+        #  text instead of adding an additional chapter.
+
+        # Remove all chapters
+        #  (fails if list doesn't exist... oh well)
+        os.system("mp4chaps --remove %s" % shellQuote(self.audio_file))
+
+        # Put correct chapter file in place if needs be, and clean up afterwards
+        #  (TODO: if mp4v2 every gets python bindings, we won't have to do this kind of work around)
+        tool_expected_chapter_file = output_extension = os.path.splitext(self.audio_file)[0] + ".chapters.txt"
+        cleanup = False
+        if tool_expected_chapter_file != chapter_txt:
+            shutil.copyfile(chapter_txt, tool_expected_chapter_file)
+            cleanup = True
+
+        # Inject chapters
+        runOrDie("mp4chaps --import %s" % shellQuote(self.audio_file))
+
+        if cleanup:
+            os.unlink(tool_expected_chapter_file)
+
+class MkaAudioBook(AudioBook):
+    def __init__(self, audio_file):
+        AudioBook.__init__(self, audio_file)
+
+    def setChapters(self, chapter_txt):
+
+        AudioBook.setChapters(self, chapter_txt)
+
+        # Inject chapters
+        runOrDie("mkvpropedit %s --chapters %s" % (shellQuote(self.audio_file), shellQuote(chapter_txt)))
+
 
 def getChapters(audio_file, chapter_txt):
 
@@ -964,7 +1011,7 @@ def usage():
   adjust_chapter      <AudioBook.chapters.txt> <chapter index> [--format=[m4b|mka]] [--cascade] <[-]seconds>
   set_chapter_tempo   <AudioBook.chapters.txt> <float ratio> [--format=[m4b|mka]]
 
-  set_chapters        <AudioBook.m4b> <AudioBook.chapters.txt>
+  set_chapters        <AudioBook.[m4b|mka]> <AudioBook.chapters.txt>
   get_chapters        <AudioBook.m4b> <AudioBook.chapters.txt>
   set_metadata        <AudioBook.m4b> <Author> <Title> [Track Title]
   set_coverart        <AudioBook.m4b> <coverart image>
@@ -1130,7 +1177,9 @@ if __name__ == "__main__":
             usage()
             sys.exit(1)
 
-        setChapters(audio_file, chapter_txt)
+        book = AudioBookFactory(audio_file)
+
+        book.setChapters(chapter_txt)
 
     elif 'get_chapters' == subcommand:
         try:

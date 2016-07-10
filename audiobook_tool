@@ -255,7 +255,7 @@ class MkaChapter(Chapter):
 
     def toString(self):
         # self.index is zero based, but matroska chapters are 1 based
-        return "CHAPTER%02d=%s\nCHAPTER%02d=%s" % (self.index + 1, self.timeString(), self.index + 1, self.name)
+        return "CHAPTER%02d=%s\nCHAPTER%02dNAME=%s" % (self.index + 1, self.timeString(), self.index + 1, self.name)
 
 
 def totalSeconds(hours, minutes, seconds, decimal):
@@ -418,7 +418,7 @@ class MkaChapterList(ChapterList):
             index_str = "%02d" % count
 
             chapter_line_time_re = re.compile("CHAPTER%s=(\d\d):(\d\d):(\d\d).(\d\d\d)" % index_str)
-            chapter_line_name_re = re.compile("CHAPTER%s=(.*)" % index_str)
+            chapter_line_name_re = re.compile("CHAPTER%sNAME=(.*)" % index_str)
 
             if line_type == "time":
 

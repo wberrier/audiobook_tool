@@ -193,7 +193,9 @@ def exitIfMissing(filename):
         sys.exit(1)
 
 class Chapter:
-    def __init__(self, timeMark, name):
+    def __init__(self, index, timeMark, name):
+        # Some chapter formats may depend on the index
+        self.index = index
         self.timeMark = timeMark
         self.name = name
 
@@ -228,8 +230,8 @@ class Chapter:
         """Compute new chapter mark based on new tempo"""
         self.timeMark /= float(tempo)
 
-    def toString(self):
-        # Takes a decimal
+    def timeString(self):
+        """This happens to match the format for both m4b and mka.  Can split out and duplicate if necessary"""
 
         total_seconds = int(self.timeMark)
         hours = total_seconds / 3600
@@ -242,7 +244,37 @@ class Chapter:
         # Get the float to 3 places, and grab everything after the decimal
         milliseconds_string = ("%0.3f" % decimal).split('.')[1]
 
-        return "%02d:%02d:%02d.%s %s" % (hours, minutes, seconds, milliseconds_string, self.name)
+        return "%02d:%02d:%02d.%s" % (hours, minutes, seconds, milliseconds_string)
+
+
+class M4bChapter(Chapter):
+    def __init__(self, index, timeMark, name):
+        Chapter.__init__(self, index, timeMark, name)
+
+        self.chapter_line_re = re.compile("(\d\d):(\d\d):(\d\d).(\d\d\d) (.*)")
+
+        # This is the format given from mp4chap
+        # Example: Chapter #030 - 19:00:40.111 - "Chapter 30"
+        self.exported_chapter_line_re = re.compile("\tChapter #\d\d\d - (\d\d):(\d\d):(\d\d).(\d\d\d) - \"(.*)\"")
+
+    def toString(self):
+        return "%s %s" % (self.timeString(), self.name)
+
+
+class MkaChapter(Chapter):
+    def __init__(self, index, timeMark, name):
+        Chapter.__init__(self, index, timeMark, name)
+
+        self.chapter_line_re = re.compile("(\d\d):(\d\d):(\d\d).(\d\d\d) (.*)")
+
+        # This is the format given from mp4chap
+        # Example: Chapter #030 - 19:00:40.111 - "Chapter 30"
+        self.exported_chapter_line_re = re.compile("\tChapter #\d\d\d - (\d\d):(\d\d):(\d\d).(\d\d\d) - \"(.*)\"")
+
+    def toString(self):
+        # self.index is zero based, but matroska chapters are 1 based
+        return "CHAPTER%02d=%s\nCHAPTER%02d=%s" % (self.index + 1, self.timeString(), self.index + 1, self.name)
+
 
 def totalSeconds(hours, minutes, seconds, decimal):
 
@@ -251,8 +283,8 @@ def totalSeconds(hours, minutes, seconds, decimal):
 
     return total_seconds
 
-chapter_line_re = re.compile("(\d\d):(\d\d):(\d\d).(\d\d\d) (.*)")
-mp4chap_exported_chapter_line_re = re.compile("\tChapter #\d\d\d - (\d\d):(\d\d):(\d\d).(\d\d\d) - \"(.*)\"")
+
+
 
 class ChapterList:
     def __init__(self):
@@ -326,7 +358,7 @@ class ChapterList:
         if len(name) == 0:
             name = os.path.splitext(filename)[0]
 
-        self.chapters.append(Chapter(self.currentTimeMark, name))
+        self.chapters.append(self.chapter_type(len(self.chapters), self.currentTimeMark, name))
 
         try:
             # Update the cumalative time
@@ -365,6 +397,27 @@ class ChapterList:
         fd = open(filename, 'w')
         fd.write(self.toString())
         fd.close()
+
+
+class M4bChapterList(ChapterList):
+    def __init__(self):
+        ChapterList.__init__(self)
+        self.chapter_type = M4bChapter
+
+class MkaChapterList(ChapterList):
+    def __init__(self):
+        ChapterList.__init__(self)
+        self.chapter_type = MkaChapter
+
+def ChapterListFactory(chapter_format):
+    """Get the appropriate chapter object for the format"""
+    if chapter_format == "m4b":
+        return M4bChapterList()
+    elif chapter_format == "mka":
+        return MkaChapterList()
+    else:
+        print "Unsupported chapter type: " + chapter_format
+        sys.exit(1)
 
 
 def getCdTrackList(cd_device, track_count_offset):
@@ -497,12 +550,12 @@ def interactivelyRipCds(output, cd_device, ignore_errors, disc_count, total_trac
 
 # Format: 00:00:00.000 Chapter 1
 # TODO: break up chapter lists for resulting m4b files over the sample limit
-def genChapterList(files, out_file="", tempo="1.0"):
+def genChapterList(files, chapter_format, out_file="", tempo="1.0"):
 
     # sort the files, just in case
     files.sort()
 
-    cl = ChapterList()
+    cl = ChapterListFactory(chapter_format)
 
     for f in files:
         print "Adding file to chapter list: " + f
@@ -845,7 +898,7 @@ def usage():
   rip_cds             <output dir> [--cd_device="device"] [ --ignore_errors ] [ <disc number> <num_previous_tracks> ]
   combine_and_encode  <AudioBook.[mp3|m4b|ogg]> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo <float ratio>]
 
-  gen_chapter_list    <AudioBook.chapters.txt> <audio files> [--tempo <float ratio>]
+  gen_chapter_list    <AudioBook.chapters.txt> <audio files> [--tempo=<float ratio>] [--format=[m4b|mka]]
   play_chapter        <AudioBook.chapters.txt> <AudioBook.m4b> [chapter range [offset]]  (range e.g. "7" or "1-3,6,8-10")
   adjust_chapter      <AudioBook.chapters.txt> <chapter index> [--cascade] <[-]seconds>
   set_chapter_tempo   <AudioBook.chapters.txt> <float ratio>
@@ -919,11 +972,15 @@ if __name__ == "__main__":
 
     elif 'gen_chapter_list' == subcommand:
         # Parse the options
+        # Set some defaults
         tempo = "1.0"
-        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", [ "tempo=" ])
+        chapter_format = "m4b"
+        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", [ "tempo=", "format=" ])
         for option, value in opts:
             if option == "--tempo":
                 tempo = value
+            if option == "--format":
+                chapter_format = value
 
         try:
             out_file = subcommand_args[0]
@@ -936,7 +993,7 @@ if __name__ == "__main__":
             usage()
             sys.exit(1)
 
-        genChapterList(files, out_file, tempo)
+        genChapterList(files, chapter_format, out_file, tempo)
 
     elif 'play_chapter' == subcommand:
 

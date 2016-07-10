@@ -815,6 +815,9 @@ class AudioBook:
 
         return cl
 
+    def setMetaData(self):
+        exitIfMissing(self.audio_file)
+
 
 class M4bAudioBook(AudioBook):
     def __init__(self, audio_file):
@@ -849,6 +852,21 @@ class M4bAudioBook(AudioBook):
         if cleanup:
             os.unlink(tool_expected_chapter_file)
 
+    def setMetaData(self, author, title, trackTitle=""):
+
+        AudioBook.setMetaData(self)
+
+        # Set track title to title if no track title was passed in
+        if trackTitle == "":
+            trackTitle = title
+
+        # Set author and title (TODO: more info?)
+        #  Use double quotes so apostraphes can be used in titles
+        # Itunes audiobooks uses the album as the top level tree, and then the title in the subtree.
+        #  TODO: maybe have optional title (song) for when books must be split into two
+        runOrDie("mp4tags -i audiobook -artist %s -album %s -song %s %s" % (shellQuote(author), shellQuote(title), shellQuote(trackTitle), shellQuote(self.audio_file)))
+
+
 class MkaAudioBook(AudioBook):
     def __init__(self, audio_file):
         AudioBook.__init__(self, audio_file)
@@ -861,20 +879,45 @@ class MkaAudioBook(AudioBook):
         # Inject chapters
         runOrDie("mkvpropedit %s --chapters %s" % (shellQuote(self.audio_file), shellQuote(chapter_txt)))
 
+    def setMetaData(self, author, title, trackTitle=""):
 
-def setMetaData(audio_file, author, title, trackTitle=""):
+        AudioBook.setMetaData(self)
 
-    exitIfMissing(audio_file)
+        # Set track title to title if no track title was passed in
+        if trackTitle == "":
+            trackTitle = title
 
-    # Set track title to title if no track title was passed in
-    if trackTitle == "":
-        trackTitle = title
+        # Set author and title (TODO: more info?)
+        #  Use double quotes so apostraphes can be used in titles
+        # TODO: no idea if this is valid for matroska
+        # NOTE: trackTitle not used on mka
 
-    # Set author and title (TODO: more info?)
-    #  Use double quotes so apostraphes can be used in titles
-    # Itunes audiobooks uses the album as the top level tree, and then the title in the subtree.
-    #  TODO: maybe have optional title (song) for when books must be split into two
-    runOrDie("mp4tags -i audiobook -artist %s -album %s -song %s %s" % (shellQuote(author), shellQuote(title), shellQuote(trackTitle), shellQuote(audio_file)))
+        # Seems artist can only be set this xml file
+        # Ugly, but oh well
+        tags_content = """
+        <Tags>
+          <Tag>
+            <Targets>
+              <TargetTypeValue>50</TargetTypeValue>
+            </Targets>
+            <Simple>
+              <Name>ARTIST</Name>
+              <String>%s</String>
+            </Simple>
+          </Tag>
+        </Tags>
+        """ % author
+
+        xml_filename = self.audio_file + ".xml"
+
+        fd = open(xml_filename, 'w')
+        fd.write(tags_content)
+        fd.close()
+
+        runOrDie("mkvpropedit %s --edit info --set title=%s --tags track:a1:%s" % (shellQuote(self.audio_file), shellQuote(title), xml_filename))
+
+        # Clean up
+        os.unlink(xml_filename)
 
 def getMetaData(audio_file):
     exitIfMissing(audio_file)
@@ -1013,7 +1056,7 @@ def usage():
 
   set_chapters        <AudioBook.[m4b|mka]> <AudioBook.chapters.txt>
   get_chapters        <AudioBook.[m4b|mka]> <AudioBook.chapters.txt>
-  set_metadata        <AudioBook.m4b> <Author> <Title> [Track Title]
+  set_metadata        <AudioBook.[m4b|mka]> <Author> <Title> [Track Title]
   set_coverart        <AudioBook.m4b> <coverart image>
   optimize            <AudioBook.m4b>
 
@@ -1208,7 +1251,9 @@ if __name__ == "__main__":
             usage()
             sys.exit(1)
 
-        setMetaData(audio_file, author, title, trackTitle)
+        book = AudioBookFactory(audio_file)
+
+        book.setMetaData(author, title, trackTitle)
 
     elif 'set_coverart' == subcommand:
         try:

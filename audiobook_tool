@@ -818,6 +818,9 @@ class AudioBook:
     def setMetaData(self):
         exitIfMissing(self.audio_file)
 
+    def setCoverArt(self):
+        exitIfMissing(self.audio_file)
+
 
 class M4bAudioBook(AudioBook):
     def __init__(self, audio_file):
@@ -865,6 +868,18 @@ class M4bAudioBook(AudioBook):
         # Itunes audiobooks uses the album as the top level tree, and then the title in the subtree.
         #  TODO: maybe have optional title (song) for when books must be split into two
         runOrDie("mp4tags -i audiobook -artist %s -album %s -song %s %s" % (shellQuote(author), shellQuote(title), shellQuote(trackTitle), shellQuote(self.audio_file)))
+
+
+    def setCoverArt(self, image_file):
+
+        AudioBook.setCoverArt(self)
+
+        exitIfMissing(image_file)
+
+        # Set/Replace Coverart
+        # (fails if no art is set... oh well)
+        os.system("mp4art --remove %s" % shellQuote(self.audio_file))
+        runOrDie("mp4art --add %s %s" % (shellQuote(image_file), shellQuote(self.audio_file)))
 
 
 class MkaAudioBook(AudioBook):
@@ -919,6 +934,16 @@ class MkaAudioBook(AudioBook):
         # Clean up
         os.unlink(xml_filename)
 
+    def setCoverArt(self, image_file):
+
+        AudioBook.setCoverArt(self)
+
+        exitIfMissing(image_file)
+
+        # Set/Replace Coverart
+        os.system("mkvpropedit %s --delete-attachment 1" % (shellQuote(self.audio_file)))
+        runOrDie("mkvpropedit %s --attachment-name cover --add-attachment %s" % (shellQuote(self.audio_file), shellQuote(image_file)))
+
 def getMetaData(audio_file):
     exitIfMissing(audio_file)
 
@@ -949,16 +974,6 @@ def getMetaData(audio_file):
     else:
         print "Error getting metadata from: " + audio_file
         sys.exit(1)
-
-def setCoverArt(audio_file, image_file):
-
-    exitIfMissing(audio_file)
-    exitIfMissing(image_file)
-
-    # Set/Replace Coverart
-    # (fails if no art is set... oh well)
-    os.system("mp4art --remove %s" % shellQuote(audio_file))
-    runOrDie("mp4art --add %s %s" % (shellQuote(image_file), shellQuote(audio_file)))
 
 def getCoverArt(audio_file):
 
@@ -1057,7 +1072,7 @@ def usage():
   set_chapters        <AudioBook.[m4b|mka]> <AudioBook.chapters.txt>
   get_chapters        <AudioBook.[m4b|mka]> <AudioBook.chapters.txt>
   set_metadata        <AudioBook.[m4b|mka]> <Author> <Title> [Track Title]
-  set_coverart        <AudioBook.m4b> <coverart image>
+  set_coverart        <AudioBook.[m4b|mka]> <coverart image>
   optimize            <AudioBook.m4b>
 
   m4b_from_files      <AudioBook.m4b> <Author> <Title> <coverart image> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo <float ratio>]
@@ -1262,7 +1277,9 @@ if __name__ == "__main__":
             usage()
             sys.exit(1)
 
-        setCoverArt(audio_file, image_file)
+        book = AudioBookFactory(audio_file)
+
+        book.setCoverArt(image_file)
 
     elif 'optimize' == subcommand:
         try:

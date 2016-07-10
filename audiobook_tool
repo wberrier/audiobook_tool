@@ -64,6 +64,9 @@ import getopt
 import glob
 import commands
 
+# for matroska tags
+import xml.etree.ElementTree
+
 try:
 	import DiscID
 	import CDDB
@@ -311,7 +314,7 @@ class ChapterList:
             c.adjustTempo(tempo)
 
     def toString(self):
-        """Get Whole chapter listing in mp4chap import/export format"""
+        """Get Whole chapter listing in the subclass import/export format"""
         ret = ""
         for c in self.chapters:
             ret += c.toString() + "\n"
@@ -329,6 +332,9 @@ class ChapterList:
         output = open(filename).read()
 
         self.populateFromChapterOutput(output)
+
+    def populateFromAudioFile(self, filename):
+        pass
 
 
 class M4bChapterList(ChapterList):
@@ -845,6 +851,12 @@ class AudioBook:
 
         print "Success!"
 
+    def getMetaData(self):
+        exitIfMissing(self.audio_file)
+
+    def getCoverArt(self):
+        exitIfMissing(self.audio_file)
+
 
 class M4bAudioBook(AudioBook):
     def __init__(self, audio_file):
@@ -913,6 +925,47 @@ class M4bAudioBook(AudioBook):
         # Optimize
         # -> optimizes mp4 file for http streaming
         runOrDie("mp4file --optimize %s" % (shellQuote(self.audio_file)))
+
+    def getMetaData(self):
+
+        AudioBook.getMetaData(self)
+
+        author = ""
+        title = ""
+        trackTitle = ""
+
+        (status, output) = commands.getstatusoutput("mp4info %s" % shellQuote(self.audio_file))
+
+        for line in output.split("\n"):
+            title_ret = re.search(" Name: (.*)", line)
+            author_ret = re.search(" (Artist|Author): (.*)", line)
+            trackTitle_ret = re.search(" Album: (.*)", line)
+
+            if title_ret:
+                title = title_ret.group(1)
+            elif author_ret:
+                if not author and author_ret.group(2):
+                    author = author_ret.group(2)
+            elif trackTitle_ret:
+                trackTitle = trackTitle_ret.group(1)
+
+        print "Author: " + author
+        print "Title: " + title
+
+        if author and title:
+            return (author, title, trackTitle)
+        else:
+            print "Error getting metadata from: " + self.audio_file
+            sys.exit(1)
+
+    def getCoverArt(self):
+
+        AudioBook.getCoverArt(self)
+
+        # Get Coverart
+        os.system("mp4art --overwrite --force --extract %s" % shellQuote(self.audio_file))
+
+        return glob.glob(os.path.splitext(self.audio_file)[0] + ".art*.jpg")
 
 
 
@@ -985,78 +1038,100 @@ class MkaAudioBook(AudioBook):
 
         print "optimize: unsupported for mka"
 
+    def getMetaData(self):
 
-def getMetaData(audio_file):
-    exitIfMissing(audio_file)
+        AudioBook.getMetaData(self)
 
-    author = ""
-    title = ""
-    trackTitle = ""
+        author = ""
+        title = ""
+        trackTitle = "" # TODO
 
-    (status, output) = commands.getstatusoutput("mp4info %s" % shellQuote(audio_file))
+        # First the info
+        (status, output) = commands.getstatusoutput("mkvinfo %s" % shellQuote(self.audio_file))
 
-    for line in output.split("\n"):
-        title_ret = re.search(" Name: (.*)", line)
-        author_ret = re.search(" (Artist|Author): (.*)", line)
-        trackTitle_ret = re.search(" Album: (.*)", line)
+        for line in output.split("\n"):
+            title_ret = re.search("Title: (.*)", line)
 
-        if title_ret:
-            title = title_ret.group(1)
-        elif author_ret:
-            if not author and author_ret.group(2):
-                author = author_ret.group(2)
-        elif trackTitle_ret:
-            trackTitle = trackTitle_ret.group(1)
+            if title_ret:
+                title = title_ret.group(1)
+                trackTitle = title
 
-    print "Author: " + author
-    print "Title: " + title
+        # Now for the tags
+        (status, xml_output) = commands.getstatusoutput("mkvextract tags %s" % shellQuote(self.audio_file))
 
-    if author and title:
-        return (author, title, trackTitle)
-    else:
-        print "Error getting metadata from: " + audio_file
-        sys.exit(1)
+        try:
+            # Get the artist
+            root = xml.etree.ElementTree.fromstring(xml_output)
+            # NOTE: these tags are case sensitive!
+            for e in root.findall('.//Simple'):
+                name = e.find('Name').text
+                value = e.find('String').text
+                if name.lower() == "artist":
+                    author = value
+        except:
+            pass
 
-def getCoverArt(audio_file):
+        print "Author: " + author
+        print "Title: " + title
 
-    exitIfMissing(audio_file)
+        if author and title:
+            return (author, title, trackTitle)
+        else:
+            print "Error getting metadata from: " + self.audio_file
+            sys.exit(1)
 
-    # Get Coverart
-    os.system("mp4art --overwrite --force --extract %s" % shellQuote(audio_file))
+    def getCoverArt(self):
 
-    return glob.glob(os.path.splitext(audio_file)[0] + ".art*.jpg")
+        AudioBook.getCoverArt(self)
+
+        # Get Coverart
+        # NOTE: this just gets them from where we put them
+        # We could go through all attachments looking for image mime-types
+        os.system("mkvextract attachments %s 1:cover.jpg " % shellQuote(self.audio_file))
+
+        if os.path.exists("cover.jpg"):
+            return ["cover.jpg"]
+        else:
+            return [""]
 
 
-def setM4bTempo(audio_file, in_file, ffmpeg_input_format_options="", tempo="1.0"):
-    """Re-encode m4b file to another tempo (for devices that can't do it on the fly: android)
+def setTempo(audio_file, in_file, ffmpeg_input_format_options="", tempo="1.0"):
+    """Re-encode file to another tempo (for devices that can't do it on the fly: android)
     Basically the same as combine_and_encode except it preserves metadata and adjusts chapters"""
 
-    basename = os.path.splitext(audio_file)[0]
-
     # Get all the metadata
-    cl = ChapterList.fromM4bFile(in_file)
+    src_cl = ChapterListFactory(filename=in_file)
+    src_cl.populateFromAudioFile(in_file)
 
-    (author, title, trackTitle) = getMetaData(in_file)
+    in_book = AudioBookFactory(in_file)
+    (author, title, trackTitle) = in_book.getMetaData()
     # Usually only one art file
-    art_files = getCoverArt(in_file)
+    art_files = in_book.getCoverArt()
 
     # adjust the chapters and save out to file
-    cl.adjustTempo(float(tempo))
+    src_cl.adjustTempo(float(tempo))
+
+    # TODO: what if in/out are different types?  Need to convert chapter objects
+    dest_cl = src_cl
+
+    basename = os.path.splitext(audio_file)[0]
     chapter_txt = basename + ".chapters.txt"
-    cl.toFile(chapter_txt)
+    dest_cl.toFile(chapter_txt)
 
     # Re-encode
     combineAndEncode(audio_file, [in_file], ffmpeg_input_format_options, tempo)
 
+    out_book = AudioBookFactory(audio_file)
+
     # Set the metadata
-    setChapters(audio_file, chapter_txt)
+    out_book.setChapters(chapter_txt)
     os.unlink(chapter_txt)
-    setMetaData(audio_file, author, title, trackTitle)
+    out_book.setMetaData(author, title, trackTitle)
     # Don't fail of no coverart found
     if len(art_files) > 0:
-        setCoverArt(audio_file, art_files[0])
+        out_book.setCoverArt(art_files[0])
         os.unlink(art_files[0])
-    optimizeMp4(audio_file)
+    out_book.optimize()
 
     print "Success!"
 
@@ -1089,7 +1164,7 @@ def usage():
   optimize            <AudioBook.[m4b|mka]>
 
   book_from_files     <AudioBook.[m4b|mka]> <Author> <Title> <coverart image> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo=<float ratio>]
-  set_m4b_tempo       <AudioBook.m4b> <Original.m4b> [--ffmpeg_input_format_options="options"] <tempo float ratio>
+  set_book_tempo      <AudioBook.[m4b|mka]> <Original.[m4b|mka]> [--ffmpeg_input_format_options="options"] <tempo float ratio>
 
 """
     print usage_text
@@ -1331,7 +1406,7 @@ if __name__ == "__main__":
 
         book.fromFiles(author, title, art_file, in_files, ffmpeg_input_format_options, tempo)
 
-    elif 'set_m4b_tempo' == subcommand:
+    elif 'set_book_tempo' == subcommand:
 
         # Parse the options
         ffmpeg_input_format_options = ""
@@ -1346,7 +1421,7 @@ if __name__ == "__main__":
             usage()
             sys.exit(1)
 
-        setM4bTempo(audio_file, in_file, ffmpeg_input_format_options, tempo)
+        setTempo(audio_file, in_file, ffmpeg_input_format_options, tempo)
 
     else:
         usage()

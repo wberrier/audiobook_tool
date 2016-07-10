@@ -824,10 +824,33 @@ class AudioBook:
     def optimize(self):
         exitIfMissing(self.audio_file)
 
+    def fromFiles(self, author, title, art_file, in_files, ffmpeg_input_format_options="", tempo="1.0"):
+        """All-in-one method to generate a book once all the necessary information is given."""
+
+        # Get the chapter name
+        chapter_txt = os.path.splitext(self.audio_file)[0] + ".chapters.txt"
+
+        # Do this option first since it will catch the error of invalid resulting extension.
+        # Otherwise, all the chapters are generated, which takes some time, only to fail on this step
+        combineAndEncode(self.audio_file, in_files, ffmpeg_input_format_options, tempo)
+
+        cl = genChapterList(in_files, self.chapter_format, chapter_txt, tempo)
+
+        # TODO: break up the chapter lists and combining/encoding if it exceeds the m4b max sample count
+
+        self.setChapters(chapter_txt)
+        self.setMetaData(author, title)
+        self.setCoverArt(art_file)
+        self.optimize()
+
+        print "Success!"
+
+
 class M4bAudioBook(AudioBook):
     def __init__(self, audio_file):
         AudioBook.__init__(self, audio_file)
         self.chapter_list_type = M4bChapterList
+        self.chapter_format = "m4b"
 
     def setChapters(self, chapter_txt):
 
@@ -897,6 +920,7 @@ class MkaAudioBook(AudioBook):
     def __init__(self, audio_file):
         AudioBook.__init__(self, audio_file)
         self.chapter_list_type = MkaChapterList
+        self.chapter_format = "mka"
 
     def setChapters(self, chapter_txt):
 
@@ -1003,27 +1027,6 @@ def getCoverArt(audio_file):
     return glob.glob(os.path.splitext(audio_file)[0] + ".art*.jpg")
 
 
-def m4bFromFiles(audio_file, author, title, art_file, in_files, ffmpeg_input_format_options="", tempo="1.0"):
-    """All-in-one method to generate a book once all the necessary information is given."""
-
-    # Get the chapter name
-    chapter_txt = os.path.splitext(audio_file)[0] + ".chapters.txt"
-
-    # Do this option first since it will catch the error of invalid resulting extension.
-    # Otherwise, all the chapters are generated, which takes some time, only to fail on this step
-    combineAndEncode(audio_file, in_files, ffmpeg_input_format_options, tempo)
-
-    cl = genChapterList(in_files, chapter_txt, tempo)
-
-    # TODO: break up the chapter lists and combining/encoding if it exceeds the m4b max sample count
-
-    setChapters(audio_file, chapter_txt)
-    setMetaData(audio_file, author, title)
-    setCoverArt(audio_file, art_file)
-    optimizeMp4(audio_file)
-
-    print "Success!"
-
 def setM4bTempo(audio_file, in_file, ffmpeg_input_format_options="", tempo="1.0"):
     """Re-encode m4b file to another tempo (for devices that can't do it on the fly: android)
     Basically the same as combine_and_encode except it preserves metadata and adjusts chapters"""
@@ -1085,7 +1088,7 @@ def usage():
   set_coverart        <AudioBook.[m4b|mka]> <coverart image>
   optimize            <AudioBook.[m4b|mka]>
 
-  m4b_from_files      <AudioBook.m4b> <Author> <Title> <coverart image> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo <float ratio>]
+  book_from_files     <AudioBook.[m4b|mka]> <Author> <Title> <coverart image> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo=<float ratio>]
   set_m4b_tempo       <AudioBook.m4b> <Original.m4b> [--ffmpeg_input_format_options="options"] <tempo float ratio>
 
 """
@@ -1302,7 +1305,7 @@ if __name__ == "__main__":
 
         book.optimize()
 
-    elif 'm4b_from_files' == subcommand:
+    elif 'book_from_files' == subcommand:
 
         # Parse the options
         ffmpeg_input_format_options = ""
@@ -1324,7 +1327,9 @@ if __name__ == "__main__":
             usage()
             sys.exit(1)
 
-        m4bFromFiles(audio_file, author, title, art_file, in_files, ffmpeg_input_format_options, tempo)
+        book = AudioBookFactory(audio_file)
+
+        book.fromFiles(author, title, art_file, in_files, ffmpeg_input_format_options, tempo)
 
     elif 'set_m4b_tempo' == subcommand:
 

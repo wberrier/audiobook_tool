@@ -309,7 +309,7 @@ _abt_optimize ()
 	esac
 }
 
-_abt_m4b_from_files ()
+_abt_book_from_files ()
 {
 	local i c=1
 
@@ -363,7 +363,7 @@ _audiobook_tool ()
 	set_metadata)       _abt_set_metadata ;;
 	set_coverart)       _abt_set_coverart ;;
 	optimize)           _abt_optimize ;;
-	m4b_from_files)     _abt_m4b_from_files ;;
+	book_from_files)    _abt_book_from_files ;;
 	*)           COMPREPLY=() ;;
 	esac
 }

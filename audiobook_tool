@@ -11,7 +11,6 @@
 # ffmpeg output settings for combine_and_encode
 ffmpeg_program="ffmpeg"
 output_bitrate="32000"
-output_rate="22050"
 output_channels="1"
 
 ffmpeg_verbosity="-v warning"
@@ -26,10 +25,13 @@ null_pipe="2>/dev/null"
 # For ffmpeg aac notes: http://ffmpeg.org/trac/ffmpeg/wiki/AACEncodingGuide
 # TODO: to support multiple versions of ffmpeg, we'd need to auto detect the aac codec name
 # also, older versions don't support named logging levels (only numbers)
+# NOTE: most profiles use 22050 since that's mono cd quality
 ffmpeg_output_profiles = {
-        '.mp3': { 'codec': 'libmp3lame', 'format': 'mp3', 'options': '' },
-        '.m4b': { 'codec': 'aac',        'format': 'mp4', 'options': '-strict experimental -cutoff 15000' },
-        '.ogg': { 'codec': 'libvorbis',  'format': 'ogg', 'options': '' },
+        '.mp3': { 'codec': 'libmp3lame', 'format': 'mp3',      'sample_rate': '22050', 'options': '' },
+        '.m4b': { 'codec': 'aac',        'format': 'mp4',      'sample_rate': '22050', 'options': '-strict experimental -cutoff 15000' },
+        '.ogg': { 'codec': 'libvorbis',  'format': 'ogg',      'sample_rate': '22050', 'options': '' },
+        # webm requires 24000 sample rate, and it looks like ffmpeg is requiring that of libopus in matroska format
+        '.mka': { 'codec': 'libopus',    'format': 'matroska', 'sample_rate': '24000', 'options': '' },
         }
 #
 ####################################################
@@ -101,12 +103,14 @@ class ChapterListFormatError(Exception):
     def __str__(self):
         return repr(self.value)
 
-def lengthInSecondsFFmpeg(file, tempo="1.0"):
+def lengthInSecondsFFmpeg(file,  ffmpeg_output_profile, tempo="1.0"):
     """Decode input using ffmpeg to determine the length of the input
 
     Optionally takes a tempo arg, in which the file is first run through a sox pipe
 
     """
+
+    output_rate = ffmpeg_output_profile['sample_rate']
 
     wc_cmd = "wc --bytes"
     ffmpeg_decode_cmd = "%s %s -y -i %s -acodec pcm_s16le -f s16le -ar %s -ac %s - %s" % (ffmpeg_program, ffmpeg_verbosity, shellQuote(file), output_rate, output_channels, null_pipe)
@@ -142,7 +146,7 @@ def lengthInSecondsFFmpeg(file, tempo="1.0"):
 # Fine, break into two regexes, since I can't seem to match both in one pass (even with re.DOTALL)
 soxi_sample_rate_re = re.compile("Sample Rate\s+: (\d+)")
 soxi_duration_re = re.compile("Duration\s+: \d\d:\d\d:\d\d\.\d\d = (\d+) samples")
-def lengthInSecondsSoxi(file, tempo="1.0"):
+def lengthInSecondsSoxi(file, ffmpeg_output_profile, tempo="1.0"):
     """
     Use soxi to determine wave file lengths, and ffmpeg decoding for all others.
 
@@ -155,7 +159,7 @@ def lengthInSecondsSoxi(file, tempo="1.0"):
         decodeRequired = True
 
     if decodeRequired:
-        seconds = lengthInSecondsFFmpeg(file, tempo)
+        seconds = lengthInSecondsFFmpeg(file, ffmpeg_output_profile, tempo)
     else:
         status, output = commands.getstatusoutput("soxi %s" % shellQuote(file))
 
@@ -290,7 +294,7 @@ class ChapterList:
 
         try:
             # Update the cumalative time
-            self.currentTimeMark += lengthInSecondsSoxi(filename, tempo)
+            self.currentTimeMark += lengthInSecondsSoxi(filename, ffmpeg_output_profiles[self.chapter_format], tempo)
         except(LengthRetrievalError):
             print "Error reading file: " + filename
             sys.exit(1)
@@ -341,6 +345,7 @@ class M4bChapterList(ChapterList):
     def __init__(self):
         ChapterList.__init__(self)
         self.chapter_type = M4bChapter
+        self.chapter_format = ".m4b"
 
     def populateFromChapterOutput(self, output):
         """Parse output to populate the chapter info"""
@@ -398,6 +403,7 @@ class MkaChapterList(ChapterList):
     def __init__(self):
         ChapterList.__init__(self)
         self.chapter_type = MkaChapter
+        self.chapter_format = ".mka"
 
     def populateFromChapterOutput(self, output):
         """Parse filename to populate the chapter info"""
@@ -697,6 +703,7 @@ def combineAndEncode(output, in_files, ffmpeg_input_options="", tempo="1.0"):
     output_codec = ffmpeg_output_profiles[output_extension]['codec']
     codec_options = ffmpeg_output_profiles[output_extension]['options']
     output_format = ffmpeg_output_profiles[output_extension]['format']
+    output_rate = ffmpeg_output_profiles[output_extension]['sample_rate']
 
     error_filename = "/tmp/audiobook_tool_error.%s" % os.getpid()
 
@@ -1150,7 +1157,7 @@ def usage():
  Sub commands:
 
   rip_cds             <output dir> [--cd_device="device"] [ --ignore_errors ] [ <disc number> <num_previous_tracks> ]
-  combine_and_encode  <AudioBook.[mp3|m4b|ogg]> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo <float ratio>]
+  combine_and_encode  <AudioBook.[mp3|m4b|ogg|mka]> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo=<float ratio>]
 
   gen_chapter_list    <AudioBook.chapters.txt> <audio files> [--tempo=<float ratio>] [--format=[m4b|mka]]
   play_chapter        <AudioBook.chapters.txt> <AudioBook.[m4b|mka]> [chapter range [offset]]  (range e.g. "7" or "1-3,6,8-10")

@@ -1,0 +1,46 @@
+#!/usr/bin/bash
+
+function abtpickch_()
+{ 
+    local i;
+    if [ $# -lt 3 ]; then
+        echo "USAGE: abtpickch <chapterfile> <audiofile> <new chapterfile> [chapter_range]" 1>&2;
+        echo "     where [chapter_range] is 1 or more chapters to pick from. If unspecified,";
+        echo "     pick from all chapters";
+        return 1;
+    fi;
+    if [ $# -eq 3 ]; then
+        range=$(seq 1 $(wc -l "$1" | sed -e 's/^\([0-9]*\) *.*/\1/'));
+    else
+        range="${4//-/..}";
+        while [ "$range" != "${range//,/}" -o "$range" != "${range//../}" ]; do
+            unset tmp;
+            for i in $range;
+            do
+                if [ "$i" != "${i//,/}" -o "$i" != "${i//../}" ]; then
+                    tmp="$tmp $(eval echo {$i})";
+                else
+                    tmp="$tmp $i";
+                fi;
+            done;
+            range="$tmp";
+        done;
+    fi;
+    for i in $range;
+    do
+        if [ $i -gt $(wc -l "$1" | sed -e 's/^\([0-9]*\) *.*/\1/') ]; then
+            continue;
+        fi;
+        # if the user hits Ctrl-C during playback, we'll skip saving the chapter
+        # if the user hits q during playback, we'll save it
+        if audiobook_tool play_chapter "$1" "$2" $i; then
+            head -$i "$1" | tail -1 >> "$3";
+        fi;
+    done;
+    return 0
+}
+
+# I have the above function in my env, so to make it a script instead, we'll just
+# call it
+
+abtpickch_ "$@"

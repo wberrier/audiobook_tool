@@ -1,0 +1,13 @@
+#!/usr/bin/perl
+
+$bottom = (scalar(@ARGV)?$ARGV[0]:2);
+$top = (scalar(@ARGV)>1?$ARGV[1]:"inf");
+while (<STDIN>)
+{
+        chomp;
+        if (/^(\d+)\t(\d+)\t(\d+)\.(\d+)$/ && ($bottom <= $1 / 1000) && ($1 / 1000 <= $top))
+        {
+                ($gap, $chap, $s, $ms)=($1, $2, $3, $4);
+                printf("%02d:%02d:%02d.%03d Chapter %s (silence %s)\n", $s/3600, ($s/60)%60, $s%60, $ms/10, $chap, $gap);
+        }
+}

@@ -40,7 +40,7 @@ inline uint32_t get_sample(const uint8_t * buf, uint8_t sample_size, bool is_fp)
             break;
         case 2:
             memcpy(&s, buf, sizeof(s));
-            return abs(s) << 16;
+            return uint32_t(abs(s)) << 16;
         case 4:
             if (is_fp)
             {
@@ -171,14 +171,14 @@ int main(int argc, char* argv[])
         int got_frame = 0;
         if (!decoded_frame)
         {
-            if (!(decoded_frame = avcodec_alloc_frame()))
+            if (!(decoded_frame = av_frame_alloc()))
             {
                 die("Could not allocate decoded frame buffer. Out of memory.");
             }
         }
         else
         {
-            avcodec_get_frame_defaults(decoded_frame);
+            av_frame_unref(decoded_frame);
         }
  
         // Read one packet into 'packet'

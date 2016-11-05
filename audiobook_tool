@@ -356,6 +356,11 @@ class M4bChapterList(ChapterList):
         count = 0
         for line in output.split('\n'):
 
+            # skip whitespace only lines (some editors love to put blank lines at the end of files)
+            matches = re.search("^\s*$", line)
+            if matches:
+                continue
+
             try:
                 (hours, minutes, seconds, milliseconds, chapter_name) = chapter_line_re.search(line).groups()
             except AttributeError:

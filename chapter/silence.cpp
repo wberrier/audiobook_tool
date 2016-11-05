@@ -53,7 +53,7 @@ inline uint32_t get_sample(const uint8_t * buf, uint8_t sample_size, bool is_fp)
             memcpy(&d, buf, sizeof(d));
             return abs(d * (1 << 31));
         default:
-            std::cerr << "Unsupported sample size: " << sample_size << std::endl;
+            std::cerr << "Unsupported sample size: " << uint16_t(sample_size) << std::endl;
             exit(1);
     }
 }
@@ -96,8 +96,6 @@ int main(int argc, char* argv[])
     // A media container
     AVFormatContext* container = 0;
  
-    AVDictionary* options = NULL;
-
     uint8_t samples_to_save = 0;
     uint8_t samples_to_save_mask = 0;
     uint8_t average_to_shift = 0;
@@ -116,18 +114,11 @@ int main(int argc, char* argv[])
         die("Could not open file");
     }
  
-    if (avformat_find_stream_info(container, &options) < 0)
+    if (avformat_find_stream_info(container, NULL) < 0)
     {
         die("Could not find file info");
     }
  
-    if (options)
-    {
-        av_dict_free(&options);
-        options = NULL;
-    }
-
-
     int stream_id = -1;
  
     // To find the first audio stream. This process may not be necessary
@@ -152,17 +143,11 @@ int main(int argc, char* argv[])
  
     AVCodec* codec = avcodec_find_decoder(codec_context->codec_id);
  
-    if (!avcodec_open2(codec_context, codec, &options) < 0)
+    if (!avcodec_open2(codec_context, codec, NULL) < 0)
     {
         die("Could not find open the needed codec");
     }
 
-    if (options)
-    {
-        av_dict_free(&options);
-        options = NULL;
-    }
- 
     AVPacket packet;
     AVFrame *decoded_frame = NULL;
  

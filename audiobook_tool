@@ -461,8 +461,6 @@ class MkaChapterList(ChapterList):
     def populateFromAudioFile(self, filename):
         """ Specialied method """
 
-        no_chapters_re = re.compile("File .* does not contain chapters of type QuickTime and Nero")
-
         (status, output) = commands.getstatusoutput("mkvextract chapters %s -s" % shellQuote(filename))
 
         self.populateFromChapterOutput(output)

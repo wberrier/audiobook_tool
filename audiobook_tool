@@ -53,6 +53,9 @@ cmd_line_dependencies = {
         'cdparanoia': '',
         'eject': '',
         'wc': '', # needed to compute input length
+        'mkvpropedit': '',
+        'mkvextract': '',
+        'mkvinfo': '',
         }
 #
 ####################################################

@@ -27,36 +27,36 @@ null_pipe="2>/dev/null"
 # also, older versions don't support named logging levels (only numbers)
 # NOTE: most profiles use 22050 since that's mono cd quality
 ffmpeg_output_profiles = {
-        '.mp3': { 'codec': 'libmp3lame', 'format': 'mp3',      'sample_rate': '22050', 'options': '' },
-        '.m4b': { 'codec': 'aac',        'format': 'mp4',      'sample_rate': '22050', 'options': '-strict experimental -cutoff 15000' },
-        '.ogg': { 'codec': 'libvorbis',  'format': 'ogg',      'sample_rate': '22050', 'options': '' },
-        '.opus':{ 'codec': 'libopus',    'format': 'ogg',      'sample_rate': '24000', 'options': '' },
-        # webm requires 24000 sample rate, and it looks like ffmpeg is requiring that of libopus in matroska format
-        '.mka': { 'codec': 'libopus',    'format': 'matroska', 'sample_rate': '24000', 'options': '' },
-        }
+    '.mp3': { 'codec': 'libmp3lame', 'format': 'mp3',      'sample_rate': '22050', 'options': '' },
+    '.m4b': { 'codec': 'aac',        'format': 'mp4',      'sample_rate': '22050', 'options': '-strict experimental -cutoff 15000' },
+    '.ogg': { 'codec': 'libvorbis',  'format': 'ogg',      'sample_rate': '22050', 'options': '' },
+    '.opus':{ 'codec': 'libopus',    'format': 'ogg',      'sample_rate': '24000', 'options': '' },
+    # webm requires 24000 sample rate, and it looks like ffmpeg is requiring that of libopus in matroska format
+    '.mka': { 'codec': 'libopus',    'format': 'matroska', 'sample_rate': '24000', 'options': '' },
+}
 #
 ####################################################
 
 ####################################################
 # external programs this program depends on
 cmd_line_dependencies = {
-        ffmpeg_program: '',
-        #'ffplay': '',
-        'mplayer': '',
-        'mp4chaps': '',
-        'mp4art': '',
-        'mp4tags': '',
-        'mp4file': '',
-        'mp4info': '',
-        'soxi': '',
-        'sox': '', # needed for tempo
-        'cdparanoia': '',
-        'eject': '',
-        'wc': '', # needed to compute input length
-        'mkvpropedit': '',
-        'mkvextract': '',
-        'mkvinfo': '',
-        }
+    ffmpeg_program: '',
+    #'ffplay': '',
+    'mplayer': '',
+    'mp4chaps': '',
+    'mp4art': '',
+    'mp4tags': '',
+    'mp4file': '',
+    'mp4info': '',
+    'soxi': '',
+    'sox': '', # needed for tempo
+    'cdparanoia': '',
+    'eject': '',
+    'wc': '', # needed to compute input length
+    'mkvpropedit': '',
+    'mkvextract': '',
+    'mkvinfo': '',
+}
 #
 ####################################################
 
@@ -74,10 +74,10 @@ import commands
 import xml.etree.ElementTree
 
 try:
-	import DiscID
-	import CDDB
+    import DiscID
+    import CDDB
 except:
-	print("Warning: missing CDDB or DiscID support")
+    print("Warning: missing CDDB or DiscID support")
 
 try:
     # Keep tagpy code around for reference, but don't require it

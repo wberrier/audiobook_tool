@@ -1,4 +1,5 @@
-- Add support for ogg files
+* Add support for opus files using 'mutagen'
+* Add support for ogg files
   android audiobook player supports them
   question: do chapters work?
   (I have to re-encode for android anyways... no reason not to use
@@ -9,35 +10,35 @@
   Looks like a better alternative would be to support matroska
   audiobooks (webm format is based on matroska)
   Until then... just stick with m4b.
-- Print ffmpeg output on error
-- Add option to rip_cds to skip cddb lookup
-- check to make sure that first chapter mark is at 0 (maybe when
+* Print ffmpeg output on error
+* Add option to rip_cds to skip cddb lookup
+* check to make sure that first chapter mark is at 0 (maybe when
   setting the chapters)  Otherwise, chapter marks are off.
-- add back play duration support (I think only mplayer supports this)
+* add back play duration support (I think only mplayer supports this)
   Idea being you can play each track for 1 second to easily scan them
-- handle case where ffmpeg fails to encode (probably with shell magic)
+* handle case where ffmpeg fails to encode (probably with shell magic)
   Otherwise, when creating an audiobook tool fails, it can be
   difficult to track down
-- normalize audio?
-- document typical use cases
+* normalize audio?
+* document typical use cases
    1. Combining a whole bunch of mp3 (or any format that ffmpeg supports) to a single
       .m4b file in one swoop.
    2. Doing each step manually so you can adjust the chapter list. (Note, you can also
       do use case #1, and then extract chapter list, modify it, and then set it again)
    3. Ripping an audiobook from cds only differs in that you create the input files
       (wav files) first, and then continue with the other use cases
-- Add a verbose option, (ie: the user probably doesn't want to see the ffmpeg
+* Add a verbose option, (ie: the user probably doesn't want to see the ffmpeg
   input output)
 
-- implement "gen_chapter_list_from_cddbid".
+* implement "gen_chapter_list_from_cddbid".
   it would fetch track info from the cddb and spit out the chapters
 
   Not really worth doing since cddb reports track lengths in seconds
   instead of milliseconds.
 
-- be able to submit tracks from chapter list to cddb?
+* be able to submit tracks from chapter list to cddb?
 
-- interactive detection of chapters via silence detection (ie: 3 seconds)
+* interactive detection of chapters via silence detection (ie: 3 seconds)
   (cutmp3 does something similar)
   Could this be done with sox?
   a workflow using a play_chapter-like command, that finds and plays detected
@@ -45,16 +46,16 @@
 
   Doesn't look like it's possible with sox, but maybe you could make a
   command that uses libsox, and accepts input from stdin.  You could
-  pipe ffmpeg output to it and have it spit out detected silience
+  pipe ffmpeg output to it and have it spit out detected silence
   markers.
 
-- Find alternative to python-cddb (or fix it).  Apparently you can't get track
+* Find alternative to python-cddb (or fix it).  Apparently you can't get track
   lengths from lookups.
-  - http://audiotools.sourceforge.net/install.html  ?
-  - freedb.py from http://bebop.bigasterisk.com/python/
-  - Raw web queries? They are actually pretty simple...
+  * http://audiotools.sourceforge.net/install.html  ?
+  * freedb.py from http://bebop.bigasterisk.com/python/
+  * Raw web queries? They are actually pretty simple...
     (http://ftp.freedb.org/pub/freedb/latest/CDDBPROTO)
-  - command line 'cddbcmd' tool? (in ubuntu cddb 'package')
+  * command line 'cddbcmd' tool? (in ubuntu cddb 'package')
 
  One potential problem of just using disc ids to generate chapter
  lists is that the total cd length as reported by cddb is in seconds

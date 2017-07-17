@@ -56,6 +56,7 @@ cmd_line_dependencies = {
     'mkvpropedit': '',
     'mkvextract': '',
     'mkvinfo': '',
+    'vorbiscomment': '', # for ogg container metadata
 }
 #
 ####################################################
@@ -238,8 +239,8 @@ class M4bChapter(Chapter):
     def toString(self):
         return "%s %s" % (self.timeString(), self.name)
 
-
-class MkaChapter(Chapter):
+class CommentFormatChapter(Chapter):
+    """This chapter type is shared amongs several containers.  Abstract out to be shared"""
     def __init__(self, index, timeMark, name):
         Chapter.__init__(self, index, timeMark, name)
 
@@ -408,11 +409,9 @@ class M4bChapterList(ChapterList):
 
 
 
-class MkaChapterList(ChapterList):
+class CommentFormatChapterList(ChapterList):
     def __init__(self):
         ChapterList.__init__(self)
-        self.chapter_type = MkaChapter
-        self.chapter_format = ".mka"
 
     def populateFromChapterOutput(self, output):
         """Parse filename to populate the chapter info"""
@@ -424,6 +423,9 @@ class MkaChapterList(ChapterList):
 
         count = 1
         for line in output.split('\n'):
+
+            if line == "":
+                continue
 
             index_str = "%02d" % count
 
@@ -461,6 +463,12 @@ class MkaChapterList(ChapterList):
                 count = count + 1
 
 
+class MkaChapterList(CommentFormatChapterList):
+    def __init__(self):
+        CommentFormatChapterList.__init__(self)
+        self.chapter_type = CommentFormatChapter
+        self.chapter_format = ".mka"
+
     def populateFromAudioFile(self, filename):
         """ Specialied method """
 
@@ -468,6 +476,25 @@ class MkaChapterList(ChapterList):
 
         self.populateFromChapterOutput(output)
 
+
+class OggChapterList(CommentFormatChapterList):
+    def __init__(self):
+        CommentFormatChapterList.__init__(self)
+        self.chapter_type = CommentFormatChapter
+        self.chapter_format = ".ogg"
+
+    def populateFromAudioFile(self, filename):
+        """ Specialied method """
+
+        (status, output) = commands.getstatusoutput("vorbiscomment -l %s" % shellQuote(filename))
+
+        # Gather all the chapter comments
+        chapter_output = ""
+        for line in output.split('\n'):
+            if line.startswith('CHAPTER'):
+                chapter_output += line + '\n'
+
+        self.populateFromChapterOutput(chapter_output)
 
 def AudioBookFactory(filename):
     """Get the appropriate book object for the format"""
@@ -485,6 +512,8 @@ def AudioBookFactory(filename):
             return M4bAudioBook(filename)
         elif book_format == "mka":
             return MkaAudioBook(filename)
+        elif book_format == "ogg":
+            return OggAudioBook(filename)
         else:
             print "Unsupported book type: " + book_format
             sys.exit(1)
@@ -508,6 +537,8 @@ def ChapterListFactory(chapter_format="", filename=""):
             return M4bChapterList()
         elif chapter_format == "mka":
             return MkaChapterList()
+        elif chapter_format == "ogg":
+            return OggChapterList()
         else:
             print "Unsupported chapter type: " + chapter_format
             sys.exit(1)
@@ -1108,6 +1139,119 @@ class MkaAudioBook(AudioBook):
         else:
             return [""]
 
+class OggAudioBook(AudioBook):
+    def __init__(self, audio_file):
+        AudioBook.__init__(self, audio_file)
+        self.chapter_list_type = OggChapterList
+        self.chapter_format = "ogg"
+        self.comments = {}
+
+        basename = os.path.splitext(self.audio_file)[0]
+        self.comments_txt = basename + ".comments.txt"
+
+    def _populateComments(self):
+
+        (status, output) = commands.getstatusoutput("vorbiscomment --list %s" % shellQuote(self.audio_file))
+
+        self._populateCommentsFromText(output)
+
+    def _populateCommentsFromFile(self, filename):
+
+        contents = open(filename).read()
+
+        self._populateCommentsFromText(contents)
+
+    def _populateCommentsFromText(self, text):
+
+        for line in text.split("\n"):
+            if len(line) > 0:
+                (key, value) = line.split('=')
+                self.comments[key] = value
+
+    def _persistComments(self):
+
+        fd = open(self.comments_txt, 'w')
+        comment_keys = self.comments.keys()
+        comment_keys.sort()
+        for k in comment_keys:
+            fd.write("%s=%s\n" % (k, self.comments[k]))
+
+        fd.close()
+
+        runOrDie("vorbiscomment --write --commentfile %s --raw %s" % (shellQuote(self.comments_txt), shellQuote(self.audio_file)))
+
+    def setChapters(self, chapter_txt):
+
+        AudioBook.setChapters(self, chapter_txt)
+
+        self._populateComments()
+
+        self._populateCommentsFromFile(chapter_txt)
+
+        self._persistComments()
+
+    def setMetaData(self, author, title, trackTitle=""):
+
+        AudioBook.setMetaData(self)
+
+        self._populateComments()
+
+        # Set track title to title if no track title was passed in
+        if trackTitle == "":
+            trackTitle = title
+
+        self.comments['ARTIST'] = author
+        self.comments['TITLE']  = title
+        # self.comments['TRACKTITLE']  = trackTitle # TODO
+
+        self._persistComments()
+
+    def setCoverArt(self, image_file):
+
+        AudioBook.setCoverArt(self)
+
+        # TODO: this is going to take some work to format the data correctly...
+        #exitIfMissing(image_file)
+
+        print "setCoverArt: currently unsupported for ogg"
+
+    def optimize(self):
+
+        AudioBook.optimize(self)
+
+        print "optimize: unsupported for ogg"
+
+    def getMetaData(self):
+
+        AudioBook.getMetaData(self)
+
+        author = ""
+        title = ""
+        trackTitle = "" # TODO
+
+        self._populateComments()
+
+        if self.comments.has_key('ARTIST'):
+            author = self.comments['ARTIST']
+        if self.comments.has_key('TITLE'):
+            title  = self.comments['TITLE']
+
+        print "Author: " + author
+        print "Title: " + title
+
+        if author and title:
+            return (author, title, trackTitle)
+        else:
+            print "Error getting metadata from: " + self.audio_file
+            sys.exit(1)
+
+    def getCoverArt(self):
+
+        AudioBook.getCoverArt(self)
+
+        print "getCoverArt: currently unsupported by ogg"
+
+        return [""]
 
 def setTempo(audio_file, in_file, ffmpeg_input_format_options="", tempo="1.0"):
     """Re-encode file to another tempo (for devices that can't do it on the fly: android)
@@ -1164,21 +1308,24 @@ def usage():
  Sub commands:
 
   rip_cds             <output dir> [--cd_device="device"] [ --ignore_errors ] [ <disc number> <num_previous_tracks> ]
-  combine_and_encode  <AudioBook.[mp3|m4b|ogg|mka|opus]> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo=<float ratio>]
+  combine_and_encode  <AudioBook.audio_ext> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo=<float ratio>]
 
-  gen_chapter_list    <AudioBook.chapters.txt> <audio files> [--tempo=<float ratio>] [--format=[m4b|mka]]
-  play_chapter        <AudioBook.chapters.txt> <AudioBook.[m4b|mka]> [chapter range [offset]]  (range e.g. "7" or "1-3,6,8-10")
-  adjust_chapter      <AudioBook.chapters.txt> <chapter index> [--format=[m4b|mka]] [--cascade] <[-]seconds>
-  set_chapter_tempo   <AudioBook.chapters.txt> <float ratio> [--format=[m4b|mka]]
+  gen_chapter_list    <AudioBook.chapters.txt> <audio files> [--tempo=<float ratio>] [--format=book_ext]
+  play_chapter        <AudioBook.chapters.txt> <AudioBook.book_ext> [chapter range [offset]]  (range e.g. "7" or "1-3,6,8-10")
+  adjust_chapter      <AudioBook.chapters.txt> <chapter index> [--format=book_ext] [--cascade] <[-]seconds>
+  set_chapter_tempo   <AudioBook.chapters.txt> <float ratio> [--format=book_ext]
 
-  set_chapters        <AudioBook.[m4b|mka]> <AudioBook.chapters.txt>
-  get_chapters        <AudioBook.[m4b|mka]> <AudioBook.chapters.txt>
-  set_metadata        <AudioBook.[m4b|mka]> <Author> <Title> [Track Title]
-  set_coverart        <AudioBook.[m4b|mka]> <coverart image>
-  optimize            <AudioBook.[m4b|mka]>
+  set_chapters        <AudioBook.book_ext> <AudioBook.chapters.txt>
+  get_chapters        <AudioBook.book_ext> <AudioBook.chapters.txt>
+  set_metadata        <AudioBook.book_ext> <Author> <Title> [Track Title]
+  set_coverart        <AudioBook.book_ext> <coverart image>
+  optimize            <AudioBook.book_ext>
 
-  book_from_files     <AudioBook.[m4b|mka]> <Author> <Title> <coverart image> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo=<float ratio>]
-  set_book_tempo      <AudioBook.[m4b|mka]> <Original.[m4b|mka]> [--ffmpeg_input_format_options="options"] <tempo float ratio>
+  book_from_files     <AudioBook.book_ext> <Author> <Title> <coverart image> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo=<float ratio>]
+  set_book_tempo      <AudioBook.book_ext> <Original.book_ext> [--ffmpeg_input_format_options="options"] <tempo float ratio>
+
+  Supported audio extensions (audio_ext): mp3, m4b, ogg, mka, opus
+  Supported book extensions (book_ext): m4b, mka, ogg
 
 """
     print usage_text

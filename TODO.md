@@ -1,15 +1,4 @@
-* Add support for opus files using 'mutagen'
-* Add support for ogg files
-  android audiobook player supports them
-  question: do chapters work?
-  (I have to re-encode for android anyways... no reason not to use
-  vorbis)
-  Akimbo can use presto for playing faster, but apparently that uses a
-  lot of cpu power.  Maybe better to just fix the speed?
-  Would be nice to support ogg.
-  Looks like a better alternative would be to support matroska
-  audiobooks (webm format is based on matroska)
-  Until then... just stick with m4b.
+* Add chapter support for opus files using 'mutagen'
 * Print ffmpeg output on error
 * Add option to rip_cds to skip cddb lookup
 * check to make sure that first chapter mark is at 0 (maybe when
@@ -38,16 +27,7 @@
 
 * be able to submit tracks from chapter list to cddb?
 
-* interactive detection of chapters via silence detection (ie: 3 seconds)
-  (cutmp3 does something similar)
-  Could this be done with sox?
-  a workflow using a play_chapter-like command, that finds and plays detected
-  silence marks, and prompts to confirm a chapter
-
-  Doesn't look like it's possible with sox, but maybe you could make a
-  command that uses libsox, and accepts input from stdin.  You could
-  pipe ffmpeg output to it and have it spit out detected silence
-  markers.
+* Convert silence2chaps and abtpickch to python
 
 * Find alternative to python-cddb (or fix it).  Apparently you can't get track
   lengths from lookups.

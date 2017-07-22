@@ -30,7 +30,7 @@ ffmpeg_output_profiles = {
     '.mp3': { 'codec': 'libmp3lame', 'format': 'mp3',      'sample_rate': '22050', 'options': '' },
     '.m4b': { 'codec': 'aac',        'format': 'mp4',      'sample_rate': '22050', 'options': '-strict experimental -cutoff 15000' },
     '.ogg': { 'codec': 'libvorbis',  'format': 'ogg',      'sample_rate': '22050', 'options': '' },
-    '.opus':{ 'codec': 'libopus',    'format': 'ogg',      'sample_rate': '24000', 'options': '' },
+    '.opus':{ 'codec': 'libopus',    'format': 'opus',     'sample_rate': '24000', 'options': '' },
     # webm requires 24000 sample rate, and it looks like ffmpeg is requiring that of libopus in matroska format
     '.mka': { 'codec': 'libopus',    'format': 'matroska', 'sample_rate': '24000', 'options': '' },
 }
@@ -496,6 +496,46 @@ class OggChapterList(CommentFormatChapterList):
 
         self.populateFromChapterOutput(chapter_output)
 
+class MutagenChapterList(CommentFormatChapterList):
+    def __init__(self):
+        CommentFormatChapterList.__init__(self)
+        self.chapter_type = CommentFormatChapter
+
+    def populateFromAudioFile(self, filename):
+        """ Specialied method """
+
+        mutagen_file = self.mutagen_type(filename)
+
+        chapter_output = ""
+
+        chapter_count = 1
+
+        while True:
+            chapter_time_tag = "CHAPTER%02d" % chapter_count
+            chapter_name_tag = "CHAPTER%02dNAME" % chapter_count
+
+            if mutagen_file.has_key(chapter_time_tag) and mutagen_file.has_key(chapter_name_tag):
+                print "Found chapter tags for: %d" % chapter_count
+                chapter_output += chapter_time_tag + '=' + mutagen_file[chapter_time_tag][0] + '\n'
+                chapter_output += chapter_name_tag + '=' + mutagen_file[chapter_name_tag][0] + '\n'
+            else:
+                break
+
+            chapter_count = chapter_count + 1
+
+        self.populateFromChapterOutput(chapter_output)
+
+class OpusChapterList(MutagenChapterList):
+    def __init__(self):
+        MutagenChapterList.__init__(self)
+        self.chapter_format = ".opus"
+
+        # TODO: where to do imports, in case mutagen isn't installed?
+        import mutagen.oggopus
+
+        self.mutagen_type = mutagen.oggopus.OggOpus
+
+
 def AudioBookFactory(filename):
     """Get the appropriate book object for the format"""
 
@@ -514,6 +554,8 @@ def AudioBookFactory(filename):
             return MkaAudioBook(filename)
         elif book_format == "ogg":
             return OggAudioBook(filename)
+        elif book_format == "opus":
+            return OpusAudioBook(filename)
         else:
             print "Unsupported book type: " + book_format
             sys.exit(1)
@@ -539,6 +581,8 @@ def ChapterListFactory(chapter_format="", filename=""):
             return MkaChapterList()
         elif chapter_format == "ogg":
             return OggChapterList()
+        elif chapter_format == "opus":
+            return OpusChapterList()
         else:
             print "Unsupported chapter type: " + chapter_format
             sys.exit(1)
@@ -1158,9 +1202,11 @@ class OggAudioBook(AudioBook):
     def _populateCommentsFromText(self, text):
 
         for line in text.split("\n"):
-            if len(line) > 0:
+            if line.count('=') > 0:
                 (key, value) = line.split('=')
                 self.comments[key] = value
+            else:
+                print "Unexpected line from key/value: " + line
 
     def _persistComments(self):
 
@@ -1244,6 +1290,115 @@ class OggAudioBook(AudioBook):
 
         return [""]
 
+
+class MutagenAudioBook(AudioBook):
+    """Really just supports types that support ogg/vorbis comment chapters at this point"""
+    def __init__(self, audio_file):
+        AudioBook.__init__(self, audio_file)
+
+    def _loadBook(self):
+
+        self.mutagen_book = self.mutagen_type(self.audio_file)
+
+    def _saveBook(self):
+
+        self.mutagen_book.save()
+
+    def _populateTagsFromFile(self, filename):
+
+        contents = open(filename).read()
+
+        self._populateTagsFromText(contents)
+
+    def _populateTagsFromText(self, text):
+
+        for line in text.split("\n"):
+            if line.count('=') > 0:
+                (key, value) = line.split('=')
+                self.mutagen_book[key] = value
+            else:
+                print "Unexpected line from key/value: " + line
+
+    def setChapters(self, chapter_txt):
+
+        AudioBook.setChapters(self, chapter_txt)
+
+        self._loadBook()
+
+        self._populateTagsFromFile(chapter_txt)
+
+        self._saveBook()
+
+    def setMetaData(self, author, title, trackTitle=""):
+
+        AudioBook.setMetaData(self)
+
+        self._loadBook()
+
+        # Set track title to title if no track title was passed in
+        if trackTitle == "":
+            trackTitle = title
+
+        self.mutagen_book['ARTIST'] = author
+        self.mutagen_book['TITLE']  = title
+        # self.mutagen_book['TRACKTITLE']  = trackTitle # TODO
+
+        self._saveBook()
+
+    def setCoverArt(self, image_file):
+
+        AudioBook.setCoverArt(self)
+
+        # TODO: this is going to take some work to format the data correctly...
+        #exitIfMissing(image_file)
+
+        print "setCoverArt: currently unsupported for " + self.chapter_format
+
+    def optimize(self):
+
+        AudioBook.optimize(self)
+
+        print "optimize: unsupported for " + self.chapter_format
+
+    def getMetaData(self):
+
+        AudioBook.getMetaData(self)
+
+        author = ""
+        title = ""
+        trackTitle = "" # TODO
+
+        self._loadBook()
+
+        if self.mutagen_book.has_key('ARTIST'):
+            author = self.mutagen_book['ARTIST']
+        if self.mutagen_book.has_key('TITLE'):
+            title  = self.mutagen_book['TITLE']
+
+        if author and title:
+            return (author, title, trackTitle)
+        else:
+            print "Error getting metadata from: " + self.audio_file
+            sys.exit(1)
+
+    def getCoverArt(self):
+
+        AudioBook.getCoverArt(self)
+
+        print "getCoverArt: currently unsupported by " + self.chapter_format
+
+        return [""]
+
+class OpusAudioBook(MutagenAudioBook):
+    def __init__(self, audio_file):
+        MutagenAudioBook.__init__(self, audio_file)
+        self.chapter_list_type = OpusChapterList
+        self.chapter_format = "opus"
+
+        import mutagen.oggopus
+        self.mutagen_type = mutagen.oggopus.OggOpus
+
+
 def setTempo(audio_file, in_file, ffmpeg_input_format_options="", tempo="1.0"):
     """Re-encode file to another tempo (for devices that can't do it on the fly: android)
     Basically the same as combine_and_encode except it preserves metadata and adjusts chapters"""
@@ -1316,7 +1471,7 @@ def usage():
   set_book_tempo      <AudioBook.book_ext> <Original.book_ext> [--ffmpeg_input_format_options="options"] <tempo float ratio>
 
   Supported audio extensions (audio_ext): mp3, m4b, ogg, mka, opus
-  Supported book extensions (book_ext): m4b, mka, ogg
+  Supported book extensions (book_ext): m4b, mka, ogg, opus
 
 """
     print usage_text

@@ -994,9 +994,6 @@ class M4bAudioBook(AudioBook):
             elif trackTitle_ret:
                 trackTitle = trackTitle_ret.group(1)
 
-        print "Author: " + author
-        print "Title: " + title
-
         if author and title:
             return (author, title, trackTitle)
         else:
@@ -1116,9 +1113,6 @@ class MkaAudioBook(AudioBook):
         except:
             pass
 
-        print "Author: " + author
-        print "Title: " + title
-
         if author and title:
             return (author, title, trackTitle)
         else:
@@ -1235,9 +1229,6 @@ class OggAudioBook(AudioBook):
             author = self.comments['ARTIST']
         if self.comments.has_key('TITLE'):
             title  = self.comments['TITLE']
-
-        print "Author: " + author
-        print "Title: " + title
 
         if author and title:
             return (author, title, trackTitle)

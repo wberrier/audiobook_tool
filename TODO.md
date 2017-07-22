@@ -1,4 +1,4 @@
-* Add chapter support for opus files using 'mutagen'
+* Implement ogg/vorbis chapters via mutagen (should be really easy)
 * Print ffmpeg output on error
 * Add option to rip_cds to skip cddb lookup
 * check to make sure that first chapter mark is at 0 (maybe when

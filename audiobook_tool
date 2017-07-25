@@ -56,7 +56,6 @@ cmd_line_dependencies = {
     'mkvpropedit': '',
     'mkvextract': '',
     'mkvinfo': '',
-    'vorbiscomment': '', # for ogg container metadata
 }
 #
 ####################################################
@@ -477,25 +476,6 @@ class MkaChapterList(CommentFormatChapterList):
         self.populateFromChapterOutput(output)
 
 
-class OggChapterList(CommentFormatChapterList):
-    def __init__(self):
-        CommentFormatChapterList.__init__(self)
-        self.chapter_type = CommentFormatChapter
-        self.chapter_format = ".ogg"
-
-    def populateFromAudioFile(self, filename):
-        """ Specialied method """
-
-        (status, output) = commands.getstatusoutput("vorbiscomment -l %s" % shellQuote(filename))
-
-        # Gather all the chapter comments
-        chapter_output = ""
-        for line in output.split('\n'):
-            if line.startswith('CHAPTER'):
-                chapter_output += line + '\n'
-
-        self.populateFromChapterOutput(chapter_output)
-
 class MutagenChapterList(CommentFormatChapterList):
     def __init__(self):
         CommentFormatChapterList.__init__(self)
@@ -524,6 +504,17 @@ class MutagenChapterList(CommentFormatChapterList):
             chapter_count = chapter_count + 1
 
         self.populateFromChapterOutput(chapter_output)
+
+class OggChapterList(MutagenChapterList):
+    def __init__(self):
+        MutagenChapterList.__init__(self)
+        self.chapter_format = ".ogg"
+
+        # TODO: where to do imports, in case mutagen isn't installed?
+        import mutagen.oggvorbis
+
+        self.mutagen_type = mutagen.oggvorbis.OggVorbis
+
 
 class OpusChapterList(MutagenChapterList):
     def __init__(self):
@@ -1177,119 +1168,6 @@ class MkaAudioBook(AudioBook):
         else:
             return [""]
 
-class OggAudioBook(AudioBook):
-    def __init__(self, audio_file):
-        AudioBook.__init__(self, audio_file)
-        self.chapter_list_type = OggChapterList
-        self.chapter_format = "ogg"
-        self.comments = {}
-
-        basename = os.path.splitext(self.audio_file)[0]
-        self.comments_txt = basename + ".comments.txt"
-
-    def _populateComments(self):
-
-        (status, output) = commands.getstatusoutput("vorbiscomment --list %s" % shellQuote(self.audio_file))
-
-        self._populateCommentsFromText(output)
-
-    def _populateCommentsFromFile(self, filename):
-
-        contents = open(filename).read()
-
-        self._populateCommentsFromText(contents)
-
-    def _populateCommentsFromText(self, text):
-
-        for line in text.split("\n"):
-            if line.count('=') > 0:
-                (key, value) = line.split('=')
-                self.comments[key] = value
-            else:
-                print "Unexpected line from key/value: " + line
-
-    def _persistComments(self):
-
-        fd = open(self.comments_txt, 'w')
-        comment_keys = self.comments.keys()
-        comment_keys.sort()
-        for k in comment_keys:
-            fd.write("%s=%s\n" % (k, self.comments[k]))
-
-        fd.close()
-
-        runOrDie("vorbiscomment --write --commentfile %s --raw %s" % (shellQuote(self.comments_txt), shellQuote(self.audio_file)))
-
-    def setChapters(self, chapter_txt):
-
-        AudioBook.setChapters(self, chapter_txt)
-
-        self._populateComments()
-
-        self._populateCommentsFromFile(chapter_txt)
-
-        self._persistComments()
-
-    def setMetaData(self, author, title, trackTitle=""):
-
-        AudioBook.setMetaData(self)
-
-        self._populateComments()
-
-        # Set track title to title if no track title was passed in
-        if trackTitle == "":
-            trackTitle = title
-
-        self.comments['ARTIST'] = author
-        self.comments['TITLE']  = title
-        # self.comments['TRACKTITLE']  = trackTitle # TODO
-
-        self._persistComments()
-
-    def setCoverArt(self, image_file):
-
-        AudioBook.setCoverArt(self)
-
-        # TODO: this is going to take some work to format the data correctly...
-        #exitIfMissing(image_file)
-
-        print "setCoverArt: currently unsupported for ogg"
-
-    def optimize(self):
-
-        AudioBook.optimize(self)
-
-        print "optimize: unsupported for ogg"
-
-    def getMetaData(self):
-
-        AudioBook.getMetaData(self)
-
-        author = ""
-        title = ""
-        trackTitle = "" # TODO
-
-        self._populateComments()
-
-        if self.comments.has_key('ARTIST'):
-            author = self.comments['ARTIST']
-        if self.comments.has_key('TITLE'):
-            title  = self.comments['TITLE']
-
-        if author and title:
-            return (author, title, trackTitle)
-        else:
-            print "Error getting metadata from: " + self.audio_file
-            sys.exit(1)
-
-    def getCoverArt(self):
-
-        AudioBook.getCoverArt(self)
-
-        print "getCoverArt: currently unsupported by ogg"
-
-        return [""]
-
 
 class MutagenAudioBook(AudioBook):
     """Really just supports types that support ogg/vorbis comment chapters at this point"""
@@ -1388,6 +1266,15 @@ class MutagenAudioBook(AudioBook):
         print "getCoverArt: currently unsupported by " + self.chapter_format
 
         return [""]
+
+class OggAudioBook(MutagenAudioBook):
+    def __init__(self, audio_file):
+        MutagenAudioBook.__init__(self, audio_file)
+        self.chapter_list_type = OggChapterList
+        self.chapter_format = "ogg"
+
+        import mutagen.oggvorbis
+        self.mutagen_type = mutagen.oggvorbis.OggVorbis
 
 class OpusAudioBook(MutagenAudioBook):
     def __init__(self, audio_file):

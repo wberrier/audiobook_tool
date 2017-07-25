@@ -1357,7 +1357,7 @@ def usage():
   book_from_files     <AudioBook.book_ext> <Author> <Title> <coverart image> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo=<float ratio>]
   set_book_tempo      <AudioBook.book_ext> <Original.book_ext> [--ffmpeg_input_format_options="options"] <tempo float ratio>
 
-  Supported audio extensions (audio_ext): mp3, m4b, ogg, mka, opus
+  Supported audio extensions (audio_ext): m4b, mka, ogg, opus, mp3
   Supported book extensions (book_ext): m4b, mka, ogg, opus
 
 """

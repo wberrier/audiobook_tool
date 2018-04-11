@@ -245,7 +245,7 @@ class CommentFormatChapter(Chapter):
 
     def toString(self):
         # self.index is zero based, but matroska chapters are 1 based
-        return "CHAPTER%02d=%s\nCHAPTER%02dNAME=%s" % (self.index + 1, self.timeString(), self.index + 1, self.name)
+        return "CHAPTER%03d=%s\nCHAPTER%03dNAME=%s" % (self.index + 1, self.timeString(), self.index + 1, self.name)
 
 
 def totalSeconds(hours, minutes, seconds, decimal):
@@ -426,7 +426,7 @@ class CommentFormatChapterList(ChapterList):
             if line == "":
                 continue
 
-            index_str = "%02d" % count
+            index_str = "%03d" % count
 
             chapter_line_time_re = re.compile("CHAPTER%s=(\d\d):(\d\d):(\d\d).(\d\d\d)" % index_str)
             chapter_line_name_re = re.compile("CHAPTER%sNAME=(.*)" % index_str)
@@ -491,11 +491,11 @@ class MutagenChapterList(CommentFormatChapterList):
         chapter_count = 1
 
         while True:
-            chapter_time_tag = "CHAPTER%02d" % chapter_count
-            chapter_name_tag = "CHAPTER%02dNAME" % chapter_count
+            chapter_time_tag = "CHAPTER%03d" % chapter_count
+            chapter_name_tag = "CHAPTER%03dNAME" % chapter_count
 
             if mutagen_file.has_key(chapter_time_tag) and mutagen_file.has_key(chapter_name_tag):
-                print "Found chapter tags for: %d" % chapter_count
+                #print "Found chapter tags for: %d" % chapter_count
                 chapter_output += chapter_time_tag + '=' + mutagen_file[chapter_time_tag][0] + '\n'
                 chapter_output += chapter_name_tag + '=' + mutagen_file[chapter_name_tag][0] + '\n'
             else:

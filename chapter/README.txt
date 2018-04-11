@@ -37,6 +37,8 @@ Workflow
 
      abtpickch chaps.txt book.m4b chaps2.txt
 
+   Save chapters with 'q', skip them with CTRL-c.
+
    Then if there are some missing, you can hunt for them by repeating steps 2 and
    3 looking at smaller silence lenghts. Don't forget to sort your chapters and
    name them when you've found them all.

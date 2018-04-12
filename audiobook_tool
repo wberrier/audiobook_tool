@@ -1094,7 +1094,7 @@ class MkaAudioBook(AudioBook):
         fd.write(tags_content)
         fd.close()
 
-        runOrDie("mkvpropedit %s --edit info --set title=%s --tags track:a1:%s" % (shellQuote(self.audio_file), shellQuote(title), xml_filename))
+        runOrDie("mkvpropedit %s --edit info --set title=%s --tags track:a1:%s" % (shellQuote(self.audio_file), shellQuote(title), shellQuote(xml_filename)))
 
         # Clean up
         os.unlink(xml_filename)

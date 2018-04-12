@@ -907,7 +907,7 @@ class AudioBook:
     def setCoverArt(self):
         exitIfMissing(self.audio_file)
 
-    def optimize(self):
+    def postProcess(self):
         exitIfMissing(self.audio_file)
 
     def fromFiles(self, author, title, art_file, in_files, ffmpeg_input_format_options="", tempo="1.0"):
@@ -927,7 +927,7 @@ class AudioBook:
         self.setChapters(chapter_txt)
         self.setMetaData(author, title)
         self.setCoverArt(art_file)
-        self.optimize()
+        self.postProcess()
 
         print "Success!"
 
@@ -998,11 +998,11 @@ class M4bAudioBook(AudioBook):
         os.system("mp4art --remove %s" % shellQuote(self.audio_file))
         runOrDie("mp4art --add %s %s" % (shellQuote(image_file), shellQuote(self.audio_file)))
 
-    def optimize(self):
+    def postProcess(self):
 
-        AudioBook.optimize(self)
+        AudioBook.postProcess(self)
 
-        # Optimize
+        # PostProcess
         # -> optimizes mp4 file for http streaming
         runOrDie("mp4file --optimize %s" % (shellQuote(self.audio_file)))
 
@@ -1109,11 +1109,11 @@ class MkaAudioBook(AudioBook):
         os.system("mkvpropedit %s --delete-attachment 1" % (shellQuote(self.audio_file)))
         runOrDie("mkvpropedit %s --attachment-name cover --add-attachment %s" % (shellQuote(self.audio_file), shellQuote(image_file)))
 
-    def optimize(self):
+    def postProcess(self):
 
-        AudioBook.optimize(self)
+        AudioBook.postProcess(self)
 
-        print "optimize: unsupported for mka"
+        print "postProcess: unsupported for mka"
 
     def getMetaData(self):
 
@@ -1232,11 +1232,11 @@ class MutagenAudioBook(AudioBook):
 
         print "setCoverArt: currently unsupported for " + self.chapter_format
 
-    def optimize(self):
+    def postProcess(self):
 
-        AudioBook.optimize(self)
+        AudioBook.postProcess(self)
 
-        print "optimize: unsupported for " + self.chapter_format
+        print "postProcess: unsupported for " + self.chapter_format
 
     def getMetaData(self):
 
@@ -1322,7 +1322,7 @@ def setTempo(audio_file, in_file, ffmpeg_input_format_options="", tempo="1.0"):
     if len(art_files) > 0:
         out_book.setCoverArt(art_files[0])
         os.unlink(art_files[0])
-    out_book.optimize()
+    out_book.postProcess()
 
     print "Success!"
 
@@ -1352,7 +1352,7 @@ def usage():
   get_chapters        <AudioBook.book_ext> <AudioBook.chapters.txt>
   set_metadata        <AudioBook.book_ext> <Author> <Title> [Track Title]
   set_coverart        <AudioBook.book_ext> <coverart image>
-  optimize            <AudioBook.book_ext>
+  post_process        <AudioBook.book_ext>
 
   book_from_files     <AudioBook.book_ext> <Author> <Title> <coverart image> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo=<float ratio>]
   set_book_tempo      <AudioBook.book_ext> <Original.book_ext> [--ffmpeg_input_format_options="options"] <tempo float ratio>
@@ -1563,7 +1563,7 @@ if __name__ == "__main__":
 
         book.setCoverArt(image_file)
 
-    elif 'optimize' == subcommand:
+    elif 'post_process' == subcommand:
         try:
             (audio_file,) = subcommand_args
         except:
@@ -1572,7 +1572,7 @@ if __name__ == "__main__":
 
         book = AudioBookFactory(audio_file)
 
-        book.optimize()
+        book.postProcess()
 
     elif 'book_from_files' == subcommand:
 

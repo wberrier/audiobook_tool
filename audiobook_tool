@@ -1113,7 +1113,18 @@ class MkaAudioBook(AudioBook):
 
         AudioBook.postProcess(self)
 
-        print "postProcess: unsupported for mka"
+        # is there a way to do this from the command line without rewriting the whole file?
+        # This probably depends on using '-dash 1' during the encode, but I'm assuming the cues end up at the end of the file?
+        # That doesn't work for Android's exo player
+        # This creates an intermediate file, and mkclean isn't widely distributed, so just use ffmpeg method
+        # But, it does work
+        #runOrDie("mkclean --keep-cues %s" % (shellQuote(self.audio_file)))
+
+        temp_file = "tmp." + self.audio_file
+
+        runOrDie("ffmpeg -i %s -dash 1 -codec copy %s" % (shellQuote(self.audio_file), shellQuote(temp_file)))
+
+        shutil.move(temp_file, self.audio_file)
 
     def getMetaData(self):
 

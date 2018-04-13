@@ -1363,6 +1363,7 @@ def usage():
   get_chapters        <AudioBook.book_ext> <AudioBook.chapters.txt>
   set_metadata        <AudioBook.book_ext> <Author> <Title> [Track Title]
   set_coverart        <AudioBook.book_ext> <coverart image>
+  get_coverart        <AudioBook.book_ext>
   post_process        <AudioBook.book_ext>
 
   book_from_files     <AudioBook.book_ext> <Author> <Title> <coverart image> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo=<float ratio>]
@@ -1573,6 +1574,17 @@ if __name__ == "__main__":
         book = AudioBookFactory(audio_file)
 
         book.setCoverArt(image_file)
+
+    elif 'get_coverart' == subcommand:
+        try:
+            (audio_file,) = subcommand_args
+        except:
+            usage()
+            sys.exit(1)
+
+        book = AudioBookFactory(audio_file)
+
+        book.getCoverArt()
 
     elif 'post_process' == subcommand:
         try:

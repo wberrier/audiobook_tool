@@ -1191,9 +1191,11 @@ class FLACPicture:
 
     @staticmethod
     def mime_type(pil_format):
-        ret = ""
+        ret = "image/" # default for everything else
         if pil_format == 'JPEG':
             ret = 'image/jpeg'
+        elif pil_format == 'PNG':
+            ret = 'image/png'
         else:
             print "Error, unknown mime type for: " + pil_format
 
@@ -1201,9 +1203,11 @@ class FLACPicture:
 
     @staticmethod
     def file_extension(mime_type):
-        ret = ""
+        ret = "unknown"
         if mime_type == 'image/jpeg':
             ret = 'jpg'
+        elif mime_type == 'image/png':
+            ret = 'png'
         else:
             print "Error, unknown file extension for: " + mime_type
 

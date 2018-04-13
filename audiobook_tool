@@ -69,6 +69,7 @@ import shutil
 import getopt
 import glob
 import commands
+import base64
 
 # for matroska tags
 import xml.etree.ElementTree
@@ -1106,6 +1107,7 @@ class MkaAudioBook(AudioBook):
         exitIfMissing(image_file)
 
         # Set/Replace Coverart
+        # TODO: there needs to be some coordination on how to set cover art for matroska
         os.system("mkvpropedit %s --delete-attachment 1" % (shellQuote(self.audio_file)))
         runOrDie("mkvpropedit %s --attachment-name cover --add-attachment %s" % (shellQuote(self.audio_file), shellQuote(image_file)))
 
@@ -1179,6 +1181,92 @@ class MkaAudioBook(AudioBook):
         else:
             return [""]
 
+class FLACPicture:
+    def __init__(self):
+
+        # Based on:
+        # https://github.com/quodlibet/mutagen/commit/301708ac25f96a2676e15ce9e0fcf5f49439bfb4
+
+        pass
+
+    @staticmethod
+    def mime_type(pil_format):
+        ret = ""
+        if pil_format == 'JPEG':
+            ret = 'image/jpeg'
+        else:
+            print "Error, unknown mime type for: " + pil_format
+
+        return ret;
+
+    @staticmethod
+    def file_extension(mime_type):
+        ret = ""
+        if mime_type == 'image/jpeg':
+            ret = 'jpg'
+        else:
+            print "Error, unknown file extension for: " + mime_type
+
+        return ret;
+
+    @staticmethod
+    def depth(pil_mode):
+
+        # https://stackoverflow.com/questions/1996577/how-can-i-get-the-depth-of-a-jpg-file
+        mode_to_bpp = {
+            '1':      1,
+            'L':      8,
+            'P':      8,
+            'RGB':   24,
+            'RGBA':  32,
+            'CMYK':  32,
+            'YCbCr': 24,
+            'I':     32,
+            'F':     32,
+        }
+
+        if mode_to_bpp.has_key(pil_mode):
+            return mode_to_bpp[pil_mode]
+        else:
+            print "Unknown depth from mode: " + pil_mode
+            return 0
+
+    def encode(self, filename):
+
+        # TODO: strange?  Don't want all book types to depend on these imports...
+        import mutagen.flac
+        import PIL.Image
+
+        pil_image = PIL.Image.open(filename)
+
+        picture = mutagen.flac.Picture()
+
+        picture.data = open(filename, 'rb').read()
+        picture.type = 3 # cover art
+        picture.desc = 'audio book cover art'
+        picture.mime = self.mime_type(pil_image.format)
+        picture.width, picture.height = pil_image.size
+        picture.depth = self.depth(pil_image.mode)
+
+        picture_data = picture.write()
+        encoded_data = base64.b64encode(picture_data)
+
+        # TODO: use a logging module?
+        print "Picture width: %d" % picture.width
+        print "Picture height: %d" % picture.height
+        print "Picture format: %s" % pil_image.format
+        print "Picture depth: %d" % picture.depth
+
+        return encoded_data
+
+    def decode(self, encoded):
+        import mutagen.flac
+
+        decoded = base64.b64decode(encoded)
+
+        picture = mutagen.flac.Picture(decoded)
+
+        return (self.file_extension(picture.mime), picture.data)
 
 class MutagenAudioBook(AudioBook):
     """Really just supports types that support ogg/vorbis comment chapters at this point"""
@@ -1238,10 +1326,19 @@ class MutagenAudioBook(AudioBook):
 
         AudioBook.setCoverArt(self)
 
-        # TODO: this is going to take some work to format the data correctly...
-        #exitIfMissing(image_file)
+        self._loadBook()
 
-        print "setCoverArt: currently unsupported for " + self.chapter_format
+        # https://wiki.xiph.org/VorbisComment#METADATA_BLOCK_PICTURE
+        # https://xiph.org/flac/format.html#metadata_block_picture
+        # https://github.com/quodlibet/mutagen/commit/301708ac25f96a2676e15ce9e0fcf5f49439bfb4
+
+        exitIfMissing(image_file)
+
+        image = FLACPicture()
+
+        self.mutagen_book['METADATA_BLOCK_PICTURE'] = [image.encode(image_file)]
+
+        self._saveBook()
 
     def postProcess(self):
 
@@ -1274,9 +1371,26 @@ class MutagenAudioBook(AudioBook):
 
         AudioBook.getCoverArt(self)
 
-        print "getCoverArt: currently unsupported by " + self.chapter_format
+        self._loadBook()
 
-        return [""]
+        image_names = []
+
+        if self.mutagen_book.has_key('METADATA_BLOCK_PICTURE'):
+
+            # Just for generating filenames...
+            count = 0
+            for encoded_image in self.mutagen_book['METADATA_BLOCK_PICTURE']:
+                image = FLACPicture()
+                (extension, data) = image.decode(encoded_image)
+                image_filename = "cover%d.%s" % (count, extension)
+                open(image_filename, 'wb').write(data)
+                image_names += [image_filename]
+                count += 1
+
+        else:
+            print 'Book does not contain cover art'
+
+        return image_names
 
 class OggAudioBook(MutagenAudioBook):
     def __init__(self, audio_file):

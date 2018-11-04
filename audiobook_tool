@@ -634,6 +634,40 @@ def getCdTrackList(cd_device, track_count_offset):
 
     return track_list
 
+class CdRipperInterface:
+    """Interface for ripping cds, could put common code here"""
+    pass
+
+class CdParanoia(CdRipperInterface):
+    def __init__(self, device, ignore_errors):
+        """Interface to use cdparanoia"""
+        self.device = device
+        self.ignore_errors = ignore_errors
+
+    def containsDiskCommand(self):
+        return "cdparanoia -Q %s 2>/dev/null" % self._extraCommandArguments()
+
+    def ripCommand(self, track_count, track_filename):
+        return "cdparanoia %s --output-wav %d %s" % (self._extraCommandArguments(), track_count, shellQuote(track_filename))
+
+    def _extraCommandArguments(self):
+        """Private method to get some options"""
+        options = ""
+
+        if self.device:
+            options += " -d " + shellQuote(self.device)
+
+        if self.ignore_errors:
+            options += " -Z "
+
+        return options
+
+
+def RipperFactory(name):
+    if name == "cdparanoia":
+        return CdParanoia
+    else:
+        raise
 
 # Rip an audiobook consisting of multiple cds to wav files, one file per track on each disc
 
@@ -649,11 +683,9 @@ def interactivelyRipCds(output, cd_device, ignore_errors, disc_count, total_trac
         os.mkdir(output)
     os.chdir(output)
 
-    cdparanoia_options = ""
-    if cd_device:
-        cdparanoia_options += " -d " + shellQuote(cd_device)
-    if ignore_errors:
-        cdparanoia_options += " -Z "
+    ripper = RipperFactory("cdparanoia")(cd_device, ignore_errors)
+
+    detect_command = ripper.containsDiskCommand()
 
     while True:
         askQuestion("Insert disc %d and press <ENTER> when ready" % disc_count)
@@ -666,7 +698,7 @@ def interactivelyRipCds(output, cd_device, ignore_errors, disc_count, total_trac
             if poll_count > 30:
                 print "Error: Could not find audio disc"
                 sys.exit(1)
-            ret = os.system("cdparanoia -Q %s 2>/dev/null" % cdparanoia_options)
+            ret = os.system(detect_command)
             time.sleep(1)
             poll_count += 1
 
@@ -687,7 +719,7 @@ def interactivelyRipCds(output, cd_device, ignore_errors, disc_count, total_trac
                 rip_track = False
 
             if rip_track:
-                command_to_run = "cdparanoia %s --output-wav %d %s" % (cdparanoia_options, track_count, shellQuote(track_filename))
+                command_to_run = ripper.ripCommand(track_count, track_filename)
                 runOrDie(command_to_run)
 
                 # Testing

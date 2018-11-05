@@ -51,6 +51,8 @@ cmd_line_dependencies = {
     'soxi': '',
     'sox': '', # needed for tempo
     'cdparanoia': '',
+    'icedax': '',
+    'cd-discid': '', # needed for the icedax ripper
     'eject': '',
     'wc': '', # needed to compute input length
     'mkvpropedit': '',
@@ -634,6 +636,12 @@ def getCdTrackList(cd_device, track_count_offset):
 
     return track_list
 
+# NOTE: not sure there's any advantage between these backends
+# (icedax (cdrkit) was a fork of cdda2wav (cdrtools) a while back)
+# supposedly the cdrtools cdda2wav some some advantages over the below,
+# (see: https://unix.stackexchange.com/questions/2442/how-to-rip-scratched-audio-cds)
+# but it's not packaged by default on very many distros
+
 class CdRipperInterface:
     """Interface for ripping cds, could put common code here"""
     pass
@@ -662,11 +670,45 @@ class CdParanoia(CdRipperInterface):
 
         return options
 
+class IceDax(CdRipperInterface):
+    def __init__(self, device, ignore_errors):
+        """Interface to use icedax"""
+        self.device = device
+        self.ignore_errors = ignore_errors
+
+    def containsDiskCommand(self):
+        # TODO: is there a awy to use icedax to do this?
+        #return "icedax --info-only --verbose-level summary %s 2>/dev/null" % self._extraCommandArguments()
+        # that works if there's a disc in the drive, but if not, it prompts
+        return "cd-discid %s > /dev/null" % self.device
+
+    def ripCommand(self, track_count, track_filename):
+        # NOTE: "--verbose-level titles" is to reduce output
+        return "icedax %s --no-infofile --track %d --verbose-level titles %s" % (self._extraCommandArguments(), track_count, shellQuote(track_filename))
+
+    def _extraCommandArguments(self):
+        """Private method to get some options"""
+
+        #options = " -g " # More easily parsable output?
+        options = ""
+
+        if self.device:
+            options += " -device " + shellQuote(self.device)
+
+        if not self.ignore_errors:
+            # uses libparanoia
+            options += " -paranoia "
+
+        return options
+
 
 def RipperFactory(name):
     if name == "cdparanoia":
         return CdParanoia
+    elif name == "icedax":
+        return IceDax
     else:
+        print "Invalid cd ripper: " + name
         raise
 
 # Rip an audiobook consisting of multiple cds to wav files, one file per track on each disc
@@ -677,13 +719,13 @@ def RipperFactory(name):
 
 # This needs to be run in it's own temporary directory, otherwise it really clouds things up.
 
-def interactivelyRipCds(output, cd_device, ignore_errors, disc_count, total_track_count):
+def interactivelyRipCds(output, cd_device, ignore_errors, cd_backend, disc_count, total_track_count):
 
     if not os.path.exists(output):
         os.mkdir(output)
     os.chdir(output)
 
-    ripper = RipperFactory("cdparanoia")(cd_device, ignore_errors)
+    ripper = RipperFactory(cd_backend)(cd_device, ignore_errors)
 
     detect_command = ripper.containsDiskCommand()
 
@@ -767,14 +809,17 @@ def buildFilesString(files):
 def getRipCdOptions(args):
     cd_device = None
     ignore_errors = False
-    opts, remaining_args = getopt.gnu_getopt(args, "", [ "cd_device=", "ignore_errors" ])
+    cd_backend = "cdparanoia"
+    opts, remaining_args = getopt.gnu_getopt(args, "", [ "cd_device=", "ignore_errors", "cd_backend=" ])
     for option, value in opts:
         if option == "--cd_device":
             cd_device = value
         elif option == "--ignore_errors":
             ignore_errors = True
+        elif option == "--cd_backend":
+            cd_backend = value
     args = remaining_args
-    return (cd_device, ignore_errors, args)
+    return (cd_device, ignore_errors, cd_backend, args)
 
 # Combines a bunch of audio files to a single mp3, m4b, or ogg audiobook
 #  Supports any audio files supported by ffmpeg
@@ -1502,7 +1547,7 @@ def usage():
 
  Sub commands:
 
-  rip_cds             <output dir> [--cd_device="device"] [ --ignore_errors ] [ <disc number> <num_previous_tracks> ]
+  rip_cds             <output dir> [--cd_device="device"] [ --ignore_errors ] [ --backend=cd_backend ] [ <disc number> <num_previous_tracks> ]
   combine_and_encode  <AudioBook.audio_ext> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo=<float ratio>]
 
   gen_chapter_list    <AudioBook.chapters.txt> <audio files> [--tempo=<float ratio>] [--format=book_ext]
@@ -1522,6 +1567,7 @@ def usage():
 
   Supported audio extensions (audio_ext): m4b, mka, ogg, opus, mp3
   Supported book extensions (book_ext): m4b, mka, ogg, opus
+  Supported cd backends (cd_backend): cdparanoia, icedax
 
 """
     print usage_text
@@ -1543,7 +1589,7 @@ if __name__ == "__main__":
     # Parse and handle each of the sub-commands
     #  TODO: more elegant way to parse all of this?
     if 'rip_cds' == subcommand:
-        (cd_device, ignore_errors, subcommand_args) = getRipCdOptions(subcommand_args)
+        (cd_device, ignore_errors, cd_backend, subcommand_args) = getRipCdOptions(subcommand_args)
         disc_num = "1"
         num_previous_tracks = "0"
         try:
@@ -1555,7 +1601,7 @@ if __name__ == "__main__":
             usage()
             sys.exit(1)
 
-        interactivelyRipCds(output, cd_device, ignore_errors, int(disc_num), int(num_previous_tracks))
+        interactivelyRipCds(output, cd_device, ignore_errors, cd_backend, int(disc_num), int(num_previous_tracks))
 
     elif 'combine_and_encode' == subcommand:
 

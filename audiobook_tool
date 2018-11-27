@@ -925,6 +925,8 @@ def reEncode(output_dir, audio_ext, in_files, ffmpeg_input_options, tempo):
 
         encodeFiles(output_file, audio_ext, [f], ffmpeg_input_options, tempo)
 
+        # TODO: try to keep individual file metadata? (Could be useful for mp3s)
+
 
 def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
     """Easily play at a spot in a chapter to assist in verifying all chapter marks"""

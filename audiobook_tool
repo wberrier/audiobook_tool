@@ -821,6 +821,19 @@ def getRipCdOptions(args):
     args = remaining_args
     return (cd_device, ignore_errors, cd_backend, args)
 
+
+def getEncodeOptions(args):
+    ffmpeg_input_format_options = ""
+    tempo = "1.0"
+    opts, remaining_args = getopt.gnu_getopt(args, "", [ "ffmpeg_input_format_options=", "tempo=" ])
+    for option, value in opts:
+        if option == "--ffmpeg_input_format_options":
+            ffmpeg_input_format_options = value
+        if option == "--tempo":
+            tempo = value
+    return (ffmpeg_input_format_options, tempo, remaining_args)
+
+
 # Combines a bunch of audio files to a single mp3, m4b, or ogg audiobook
 #  Supports any audio files supported by ffmpeg
 #  Do this in one pass to avoid a path using intermediate files going to wav, raw, and then output
@@ -1604,16 +1617,7 @@ if __name__ == "__main__":
         interactivelyRipCds(output, cd_device, ignore_errors, cd_backend, int(disc_num), int(num_previous_tracks))
 
     elif 'combine_and_encode' == subcommand:
-
-        # Parse the options
-        ffmpeg_input_format_options = ""
-        tempo = "1.0"
-        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", [ "ffmpeg_input_format_options=", "tempo=" ])
-        for option, value in opts:
-            if option == "--ffmpeg_input_format_options":
-                ffmpeg_input_format_options = value
-            if option == "--tempo":
-                tempo = value
+        (ffmpeg_input_format_options, tempo, subcommand_args) = getEncodeOptions(subcommand_args)
 
         try:
             output = subcommand_args[0]
@@ -1795,16 +1799,7 @@ if __name__ == "__main__":
         book.postProcess()
 
     elif 'book_from_files' == subcommand:
-
-        # Parse the options
-        ffmpeg_input_format_options = ""
-        tempo = "1.0"
-        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", [ "ffmpeg_input_format_options=", "tempo=" ])
-        for option, value in opts:
-            if option == "--ffmpeg_input_format_options":
-                ffmpeg_input_format_options = value
-            if option == "--tempo":
-                tempo = value
+        (ffmpeg_input_format_options, tempo, subcommand_args) = getEncodeOptions(subcommand_args)
 
         try:
             audio_file = subcommand_args[0]

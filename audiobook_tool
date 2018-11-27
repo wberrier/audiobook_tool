@@ -851,13 +851,10 @@ def getEncodeOptions(args):
 #     when it tried to play it (or scroll the chapters)
 
 # TODO: incorporate gen_chapter_list for m4b files that must be broken up
-def combineAndEncode(output, in_files, ffmpeg_input_options="", tempo="1.0"):
+def encodeFiles(output, output_extension, in_files, ffmpeg_input_options, tempo):
 
     for f in in_files:
         exitIfMissing(f)
-
-    # Get output file extension
-    output_extension = os.path.splitext(output)[1]
 
     if not ffmpeg_output_profiles.has_key(output_extension):
         print "Error: '%s' is of unknown resulting file format: %s" % (output, output_extension)
@@ -910,6 +907,24 @@ def combineAndEncode(output, in_files, ffmpeg_input_options="", tempo="1.0"):
         sys.exit(1)
 
     print "Success!"
+
+def combineAndEncode(output, in_files, ffmpeg_input_options="", tempo="1.0"):
+    # Get output file extension
+    output_extension = os.path.splitext(output)[1]
+
+    encodeFiles(output, output_extension, in_files, ffmpeg_input_options, tempo)
+
+def reEncode(output_dir, audio_ext, in_files, ffmpeg_input_options, tempo):
+    """Encode a bunch of files"""
+
+    # Encode each individually
+    for f in in_files:
+
+        # New filename
+        output_file = output_dir + os.sep + os.path.splitext(f)[0] + audio_ext
+
+        encodeFiles(output_file, audio_ext, [f], ffmpeg_input_options, tempo)
+
 
 def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
     """Easily play at a spot in a chapter to assist in verifying all chapter marks"""
@@ -1562,6 +1577,7 @@ def usage():
 
   rip_cds             <output dir> [--cd_device="device"] [ --ignore_errors ] [ --backend=cd_backend ] [ <disc number> <num_previous_tracks> ]
   combine_and_encode  <AudioBook.audio_ext> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo=<float ratio>]
+  reencode            <output dir> <output audio_ext> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo=<float ratio>]
 
   gen_chapter_list    <AudioBook.chapters.txt> <audio files> [--tempo=<float ratio>] [--format=book_ext]
   play_chapter        <AudioBook.chapters.txt> <AudioBook.book_ext> [chapter range [offset]]  (range e.g. "7" or "1-3,6,8-10")
@@ -1630,6 +1646,23 @@ if __name__ == "__main__":
             sys.exit(1)
 
         combineAndEncode(output, in_files, ffmpeg_input_format_options, tempo)
+
+    elif 'reencode' == subcommand:
+        (ffmpeg_input_format_options, tempo, subcommand_args) = getEncodeOptions(subcommand_args)
+
+        try:
+            output = subcommand_args[0]
+            # bridge command line interface with code interface with the dot
+            audio_ext = "." + subcommand_args[1]
+            in_files = subcommand_args[2:]
+
+            if len(in_files) < 1:
+                raise
+        except:
+            usage()
+            sys.exit(1)
+
+        reEncode(output, audio_ext, in_files, ffmpeg_input_format_options, tempo)
 
     elif 'gen_chapter_list' == subcommand:
         # Parse the options

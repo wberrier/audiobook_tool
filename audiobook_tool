@@ -939,11 +939,15 @@ def reEncode(output_dir, audio_ext, in_files, ffmpeg_input_options, tempo):
     for f in in_files:
 
         # New filename
-        output_file = output_dir + os.sep + os.path.splitext(f)[0] + audio_ext
+        [basename, extension] = os.path.splitext(f)
+        output_file = output_dir + os.sep + basename + audio_ext
 
         encodeFiles(output_file, audio_ext, [f], ffmpeg_input_options, tempo)
 
-        copyMetaData(f, output_file)
+        if extension == audio_ext:
+            copyMetaData(f, output_file)
+        else:
+            print "Warning: Copying metadata between differing formats is unsupported"
 
 
 def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):

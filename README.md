@@ -75,6 +75,21 @@ files.  The recommended layout seems to be to have a "Title" folder
 containing files.  The files can each have metadata tags, which can be
 displayed.
 
+Easytag is a nice way to set the metadata.  For each file:
+
+* Artist: Author
+* Album: Title
+* Title: Chapter Name
+
 The 2013 Ford Fusion supports mp3 and wma.  What other formats are
 common for automobiles?
 
+## Splitting File
+
+Sometimes it's helpful to split an audio file into multiple files.
+This can be done with Audacity:
+
+https://manual.audacityteam.org/man/splitting_a_recording_into_separate_tracks.html
+
+If the source file is large, exporting to flac works well (ie: wav
+files seem to have a 6GB filesize max)

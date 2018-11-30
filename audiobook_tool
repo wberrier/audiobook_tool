@@ -64,7 +64,6 @@ cmd_line_dependencies = {
 
 import sys
 import os
-import readline
 import re
 import time
 import shutil

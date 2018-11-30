@@ -57,7 +57,8 @@ TODO
 
 #### Voice
 
-m4b: all metadata supported
+m4b: all metadata supported (although chapter bug:
+https://github.com/PaulWoitaschek/Voice/issues/690 )
 
 mka: no support for title nor cover art, unable to seek (see referenced
 issue above)
@@ -65,4 +66,15 @@ issue above)
 opus: no support for title nor cover art
 
 ogg: all metadata supported
+
+
+### Data CD
+
+Many cd players, particularly in automobiles, support playing mp3
+files.  The recommended layout seems to be to have a "Title" folder
+containing files.  The files can each have metadata tags, which can be
+displayed.
+
+The 2013 Ford Fusion supports mp3 and wma.  What other formats are
+common for automobiles?
 

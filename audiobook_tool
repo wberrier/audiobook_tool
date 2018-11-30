@@ -1456,8 +1456,8 @@ class MutagenAudioBook(AudioBook):
             trackTitle = title
 
         self.mutagen_book['ARTIST'] = author
-        self.mutagen_book['TITLE']  = title
-        # self.mutagen_book['TRACKTITLE']  = trackTitle # TODO
+        self.mutagen_book['ALBUM']  = title
+        self.mutagen_book['TITLE']  = trackTitle
 
         self._saveBook()
 
@@ -1491,14 +1491,16 @@ class MutagenAudioBook(AudioBook):
 
         author = ""
         title = ""
-        trackTitle = "" # TODO
+        trackTitle = ""
 
         self._loadBook()
 
         if self.mutagen_book.has_key('ARTIST'):
             author = self.mutagen_book['ARTIST']
+        if self.mutagen_book.has_key('ALBUM'):
+            title = self.mutagen_book['ALBUM']
         if self.mutagen_book.has_key('TITLE'):
-            title  = self.mutagen_book['TITLE']
+            trackTitle  = self.mutagen_book['TITLE']
 
         if author and title:
             return (author, title, trackTitle)

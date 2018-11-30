@@ -1168,8 +1168,13 @@ class M4bAudioBook(AudioBook):
         # Get Coverart
         os.system("mp4art --overwrite --force --extract %s" % shellQuote(self.audio_file))
 
-        return glob.glob(os.path.splitext(self.audio_file)[0] + ".art*.jpg")
+        files = []
 
+        # TODO: what other extensions?
+        for ext in ['jpg', 'png']:
+            files += glob.glob(os.path.splitext(self.audio_file)[0] + ".art*." + ext)
+
+        return files
 
 
 class MkaAudioBook(AudioBook):

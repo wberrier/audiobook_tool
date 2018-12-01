@@ -1629,15 +1629,22 @@ def setTempo(audio_file, in_file, ffmpeg_input_format_options="", tempo="1.0"):
     print "Success!"
 
 
-def extractTracks(audio_file, output_dir):
+def extractTracks(audio_file, chapter_format, chapter_file, output_dir):
     """Extract tracks based on chapters.  Useful to create 'mp3 cds' from a book file"""
 
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
 
+    if chapter_format == "":
+        chapter_format = os.path.splitext(audio_file)[1]
+
     # Get all the metadata
-    cl = ChapterListFactory(filename=audio_file)
-    cl.populateFromAudioFile(audio_file)
+    if chapter_file != "":
+        cl = ChapterListFactory(chapter_format=chapter_format)
+        cl.populateFromChapterFile(chapter_file)
+    else:
+        cl = ChapterListFactory(filename=audio_file)
+        cl.populateFromAudioFile(audio_file)
 
     # For all of the chapters (one based)
     for i in range(1, cl.size() + 1):
@@ -1655,7 +1662,7 @@ def extractTracks(audio_file, output_dir):
         if i != cl.size():
             end_time_options = " -to " + cl.getChapter(i + 1).timeString()
 
-        command = "ffmpeg -i " + audio_file + start_time_options + end_time_options + " " + chapter_out_file
+        command = "ffmpeg -y -i " + shellQuote(audio_file) + start_time_options + end_time_options + " " + shellQuote(chapter_out_file)
 
         runOrDie(command)
 
@@ -1692,7 +1699,7 @@ def usage():
 
   book_from_files     <AudioBook.book_ext> <Author> <Title> <coverart image> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo=<float ratio>]
   set_book_tempo      <AudioBook.book_ext> <Original.book_ext> [--ffmpeg_input_format_options="options"] <tempo float ratio>
-  extract_tracks      <AudioBook.book_ext> <output dir>
+  extract_tracks      <AudioBook.book_ext|ffmpeg recognizable audio file> <output dir> [--chapter_file=<AudioBook.chapters.txt>] [--chapter_format=<book_ext>]
 
   Supported audio extensions (audio_ext): m4b, mka, ogg, opus, mp3
   Supported book extensions (book_ext): m4b, mka, ogg, opus
@@ -1966,6 +1973,14 @@ if __name__ == "__main__":
         setTempo(audio_file, in_file, ffmpeg_input_format_options, tempo)
 
     elif 'extract_tracks' == subcommand:
+        chapter_file = ""
+        chapter_format = ""
+        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", [ "chapter_file=", "chapter_format=" ])
+        for option, value in opts:
+            if option == "--chapter_file":
+                chapter_file = value
+            elif option == "--chapter_format":
+                chapter_format = value
 
         try:
             (audio_file, output_dir) = subcommand_args
@@ -1973,7 +1988,7 @@ if __name__ == "__main__":
             usage()
             sys.exit(1)
 
-        extractTracks(audio_file, output_dir)
+        extractTracks(audio_file, chapter_format, chapter_file, output_dir)
 
     else:
         usage()

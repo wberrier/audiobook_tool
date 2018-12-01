@@ -1629,6 +1629,38 @@ def setTempo(audio_file, in_file, ffmpeg_input_format_options="", tempo="1.0"):
     print "Success!"
 
 
+def extractTracks(audio_file, output_dir):
+    """Extract tracks based on chapters.  Useful to create 'mp3 cds' from a book file"""
+
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
+
+    # Get all the metadata
+    cl = ChapterListFactory(filename=audio_file)
+    cl.populateFromAudioFile(audio_file)
+
+    # For all of the chapters (one based)
+    for i in range(1, cl.size() + 1):
+
+        # Use lossless format, as usually this is an intermediate format
+        chapter_out_file = output_dir + os.sep + "%03d" % (i) + "-track.flac"
+
+        # Run ffmpeg command to extract track
+        chapter = cl.getChapter(i)
+
+        start_time_options = " -ss " + chapter.timeString()
+
+        end_time_options = ""
+        # Don't need end time on last chapter
+        if i != cl.size():
+            end_time_options = " -to " + cl.getChapter(i + 1).timeString()
+
+        command = "ffmpeg -i " + audio_file + start_time_options + end_time_options + " " + chapter_out_file
+
+        runOrDie(command)
+
+
+
 def validateDependencies(progs):
 
     for p in progs:
@@ -1660,6 +1692,7 @@ def usage():
 
   book_from_files     <AudioBook.book_ext> <Author> <Title> <coverart image> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo=<float ratio>]
   set_book_tempo      <AudioBook.book_ext> <Original.book_ext> [--ffmpeg_input_format_options="options"] <tempo float ratio>
+  extract_tracks      <AudioBook.book_ext> <output dir>
 
   Supported audio extensions (audio_ext): m4b, mka, ogg, opus, mp3
   Supported book extensions (book_ext): m4b, mka, ogg, opus
@@ -1931,6 +1964,16 @@ if __name__ == "__main__":
             sys.exit(1)
 
         setTempo(audio_file, in_file, ffmpeg_input_format_options, tempo)
+
+    elif 'extract_tracks' == subcommand:
+
+        try:
+            (audio_file, output_dir) = subcommand_args
+        except:
+            usage()
+            sys.exit(1)
+
+        extractTracks(audio_file, output_dir)
 
     else:
         usage()

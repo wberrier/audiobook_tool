@@ -174,7 +174,7 @@ def lengthInSecondsSoxi(file, ffmpeg_output_profile, tempo="1.0"):
             (num_samples,) = soxi_duration_re.search(output).groups()
         except:
             raise LengthRetrievalError("Failed to parse: " + output)
-        seconds = float(num_samples) / float(sample_rate)
+        seconds = num_samples / sample_rate
         # TODO: check to see if "seconds = float(num_samples) / (float(sample_rate) * float(tempo))"
         #       would suffice instead of sending the wave file through sox when a tempo is given
 
@@ -220,8 +220,8 @@ class Chapter:
         """This happens to match the format for both m4b and mka.  Can split out and duplicate if necessary"""
 
         total_seconds = int(self.timeMark)
-        hours = total_seconds / 3600
-        minutes = (total_seconds - (hours * 3600)) / 60
+        hours = total_seconds // 3600
+        minutes = (total_seconds - (hours * 3600)) // 60
         seconds = (total_seconds - (hours * 3600) - (minutes * 60))
 
         # Round the decimal to 3 places (since that's all the chapter format accounts for)

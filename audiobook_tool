@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 # Author: Wade Berrier  <wberrier@gmail.com>
 
@@ -69,7 +69,7 @@ import time
 import shutil
 import getopt
 import glob
-import commands
+import subprocess
 import base64
 
 # for matroska tags
@@ -130,18 +130,18 @@ def lengthInSecondsFFmpeg(file,  ffmpeg_output_profile, tempo="1.0"):
     else:
         command = "%s | %s" % (ffmpeg_decode_cmd, wc_cmd)
 
-    status, output = commands.getstatusoutput(command)
+    status, output = subprocess.getstatusoutput(command)
     # If there was a return code error, or we counted 0 bytes -> error
     if status or output == "0":
-        print output
+        print(output)
         raise WavConversionError("Unable to convert file to .wav: " + file)
 
     # put this in a try block to help catch invalid output
     try:
         results = float(output)/(float(output_rate)*float(output_channels)*2.0) # 2 because 16 bits per sample, or 2 bytes per sample
     except:
-        print "Command: " + command
-        print "Output: " + output
+        print("Command: " + command)
+        print("Output: " + output)
         raise WavConversionError("Unable to convert file to .wav: " + file)
     return results
 
@@ -167,7 +167,7 @@ def lengthInSecondsSoxi(file, ffmpeg_output_profile, tempo="1.0"):
     if decodeRequired:
         seconds = lengthInSecondsFFmpeg(file, ffmpeg_output_profile, tempo)
     else:
-        status, output = commands.getstatusoutput("soxi %s" % shellQuote(file))
+        status, output = subprocess.getstatusoutput("soxi %s" % shellQuote(file))
 
         try:
             (sample_rate,) = soxi_sample_rate_re.search(output).groups()
@@ -186,23 +186,23 @@ def lengthInSecondsSoxi(file, ffmpeg_output_profile, tempo="1.0"):
 # -> shelling out to soxi is probably sufficient
 
 def runOrDie(command, error_message=""):
-    print "Running: " + command
+    print("Running: " + command)
     ret = os.system(command)
     if ret:
-        print command + " failed"
+        print(command + " failed")
         if len(error_message):
-            print "Error: " + error_message
+            print("Error: " + error_message)
         sys.exit(1)
 
 def askQuestion(question):
-    print question
-    answer=raw_input()
-    print "answer='%s'" % answer
+    print(question)
+    answer=input()
+    print("answer='%s'" % answer)
     return answer
 
 def exitIfMissing(filename):
     if not os.path.exists(filename):
-        print "Error: file does not exist: " + filename
+        print("Error: file does not exist: " + filename)
         sys.exit(1)
 
 class Chapter:
@@ -267,7 +267,7 @@ class ChapterList:
 
     def getChapter(self, chapterIndex):
         if not (chapterIndex > 0 and chapterIndex <= len(self.chapters)):
-            print "Error: invalid chapter: %d" % chapterIndex
+            print("Error: invalid chapter: %d" % chapterIndex)
             sys.exit(1)
 
         return self.chapters[chapterIndex - 1]
@@ -290,7 +290,7 @@ class ChapterList:
                 # Encode from unicode to utf-8 so it can be written to file
                 name = name.encode("utf-8")
             except:
-                print "tagpy: unable to get track title from: " + filename
+                print("tagpy: unable to get track title from: " + filename)
 
         # If no track title found, use the filename
         if len(name) == 0:
@@ -302,7 +302,7 @@ class ChapterList:
             # Update the cumalative time
             self.currentTimeMark += lengthInSecondsSoxi(filename, ffmpeg_output_profiles[self.chapter_format], tempo)
         except(LengthRetrievalError):
-            print "Error reading file: " + filename
+            print("Error reading file: " + filename)
             sys.exit(1)
 
     def adjustChapterTimeMark(self, chapterIndex, adjustNumSeconds, cascade=False):
@@ -370,7 +370,7 @@ class M4bChapterList(ChapterList):
                 (hours, minutes, seconds, milliseconds, chapter_name) = chapter_line_re.search(line).groups()
             except AttributeError:
                 error = "Error: unrecognizable chapter line: " + line
-                print error
+                print(error)
                 raise ChapterListFormatError(error)
 
             total_seconds = totalSeconds(hours, minutes, seconds, milliseconds)
@@ -386,7 +386,7 @@ class M4bChapterList(ChapterList):
         no_chapters_re = re.compile("File .* does not contain chapters of type QuickTime and Nero")
 
         # TODO: mp4chaps actually supports "--export" to do this thing
-        (status, output) = commands.getstatusoutput("mp4chaps --list %s" % shellQuote(filename))
+        (status, output) = subprocess.getstatusoutput("mp4chaps --list %s" % shellQuote(filename))
 
         # Check for empty chapter
         if no_chapters_re.search(output):
@@ -439,7 +439,7 @@ class CommentFormatChapterList(ChapterList):
                     (hours, minutes, seconds, milliseconds) = chapter_line_time_re.search(line).groups()
                 except AttributeError:
                     error = "Error: unrecognizable chapter line: " + line
-                    print error
+                    print(error)
                     raise ChapterListFormatError(error)
 
                 total_seconds = totalSeconds(hours, minutes, seconds, milliseconds)
@@ -453,7 +453,7 @@ class CommentFormatChapterList(ChapterList):
                     (chapter_name,) = chapter_line_name_re.search(line).groups()
                 except AttributeError:
                     error = "Error: unrecognizable chapter line: " + line
-                    print error
+                    print(error)
                     raise ChapterListFormatError(error)
 
                 # The chapter file uses one based, the object is zero based
@@ -473,7 +473,7 @@ class MkaChapterList(CommentFormatChapterList):
     def populateFromAudioFile(self, filename):
         """ Specialied method """
 
-        (status, output) = commands.getstatusoutput("mkvextract chapters %s -s" % shellQuote(filename))
+        (status, output) = subprocess.getstatusoutput("mkvextract chapters %s -s" % shellQuote(filename))
 
         self.populateFromChapterOutput(output)
 
@@ -496,7 +496,7 @@ class MutagenChapterList(CommentFormatChapterList):
             chapter_time_tag = "CHAPTER%03d" % chapter_count
             chapter_name_tag = "CHAPTER%03dNAME" % chapter_count
 
-            if mutagen_file.has_key(chapter_time_tag) and mutagen_file.has_key(chapter_name_tag):
+            if chapter_time_tag in mutagen_file and chapter_name_tag in mutagen_file:
                 #print "Found chapter tags for: %d" % chapter_count
                 chapter_output += chapter_time_tag + '=' + mutagen_file[chapter_time_tag][0] + '\n'
                 chapter_output += chapter_name_tag + '=' + mutagen_file[chapter_name_tag][0] + '\n'
@@ -535,10 +535,10 @@ class MP3ChapterList:
         pass
 
     def populateFromAudioFile(self, filename):
-        print "Warning: mp3 chapters not supported: chapters not loaded"
+        print("Warning: mp3 chapters not supported: chapters not loaded")
 
     def toFile(self, filename):
-        print "Warning: mp3 chapters not supported: chapters not saved"
+        print("Warning: mp3 chapters not supported: chapters not saved")
         open(filename, 'w').write("")
 
 def AudioBookFactory(filename):
@@ -549,7 +549,7 @@ def AudioBookFactory(filename):
     if len(dot_extension) > 0 and dot_extension[0] == ".":
         book_format = dot_extension[1:]
     else:
-        print "Unable to deduce chapter type from file: " + filename
+        print("Unable to deduce chapter type from file: " + filename)
         sys.exit(1)
 
     if book_format != "":
@@ -564,7 +564,7 @@ def AudioBookFactory(filename):
         elif book_format == "mp3":
             return MP3AudioBook(filename)
         else:
-            print "Unsupported book type: " + book_format
+            print("Unsupported book type: " + book_format)
             sys.exit(1)
 
 
@@ -578,7 +578,7 @@ def ChapterListFactory(chapter_format="", filename=""):
         if len(dot_extension) > 0 and dot_extension[0] == ".":
             chapter_format = dot_extension[1:]
         else:
-            print "Unable to deduce chapter type from file: " + filename
+            print("Unable to deduce chapter type from file: " + filename)
             sys.exit(1)
 
     if chapter_format != "":
@@ -593,7 +593,7 @@ def ChapterListFactory(chapter_format="", filename=""):
         elif chapter_format == "mp3":
             return MP3ChapterList()
         else:
-            print "Unsupported chapter type: " + chapter_format
+            print("Unsupported chapter type: " + chapter_format)
             sys.exit(1)
 
 
@@ -606,26 +606,26 @@ def getCdTrackList(cd_device, track_count_offset):
     cd = DiscID.open(cd_device)
     disc_id = DiscID.disc_id(cd)
     num_tracks = disc_id[1]
-    print "Num tracks: %d" % num_tracks
+    print("Num tracks: %d" % num_tracks)
     lookup_successful = True
     try:
         (query_status, query_info) = CDDB.query(disc_id, client_name='audiobook_tool',
                 client_version=1.0, host='localhost', user='audiobook_tool_user')
         if query_status == 211:
-            print "Multiple discs found in CDDB:"
+            print("Multiple discs found in CDDB:")
             for i in range(0, len(query_info)):
-                print "%d: %s" % (i + 1, query_info[i]['title'])
+                print("%d: %s" % (i + 1, query_info[i]['title']))
             answer = askQuestion("Which select which disc? (blank for none) [1-%d]" % len(query_info))
             i = int(answer) - 1
             (cat, id) = [query_info[i]['category'], query_info[i]['disc_id']]
         elif query_status == 200:
-            print "Found match in CDDB!"
+            print("Found match in CDDB!")
             (cat,id) = [query_info['category'], query_info['disc_id']]
     except IOError:
-        print "Warning: failed to connect internet database... using generic track names"
+        print("Warning: failed to connect internet database... using generic track names")
         lookup_successful = False
     except ValueError:
-        print "Warning: invalid cddb response... using generic track names"
+        print("Warning: invalid cddb response... using generic track names")
         lookup_successful = False
 
     # Populate a structure of lists to return to the user
@@ -638,10 +638,10 @@ def getCdTrackList(cd_device, track_count_offset):
                 host='localhost', user='audiobook_tool_user')
         for i in range(0, num_tracks):
             title_key = "TTITLE%d" % i
-            if read_info.has_key(title_key):
+            if title_key in read_info:
                 track_list.append(read_info[title_key])
             else:
-                print "Error: actual cd has %d tracks, but metadata from cddb has less than this" % num_tracks
+                print("Error: actual cd has %d tracks, but metadata from cddb has less than this" % num_tracks)
                 sys.exit(1)
 
     # We didn't find a match... generate the track listing manually
@@ -723,7 +723,7 @@ def RipperFactory(name):
     elif name == "icedax":
         return IceDax
     else:
-        print "Invalid cd ripper: " + name
+        print("Invalid cd ripper: " + name)
         raise
 
 # Rip an audiobook consisting of multiple cds to wav files, one file per track on each disc
@@ -751,9 +751,9 @@ def interactivelyRipCds(output, cd_device, ignore_errors, cd_backend, disc_count
         poll_count = 0
         ret = 1
         while ret != 0:
-            print "Looking for disc..."
+            print("Looking for disc...")
             if poll_count > 30:
-                print "Error: Could not find audio disc"
+                print("Error: Could not find audio disc")
                 sys.exit(1)
             ret = os.system(detect_command)
             time.sleep(1)
@@ -768,7 +768,7 @@ def interactivelyRipCds(output, cd_device, ignore_errors, cd_backend, disc_count
 
         for track_name in track_list:
             track_filename = '%.2d-%.2d-%s.wav' % (disc_count, track_count, track_name)
-            print "Track filename: " + track_name
+            print("Track filename: " + track_name)
 
             rip_track = True
             # Default is to skip if the file exists
@@ -807,7 +807,7 @@ def genChapterList(files, chapter_format, out_file="", tempo="1.0"):
     cl = ChapterListFactory(chapter_format=chapter_format)
 
     for f in files:
-        print "Adding file to chapter list: " + f
+        print("Adding file to chapter list: " + f)
         cl.addChapterFromFile(f, tempo)
 
     if len(out_file) > 0:
@@ -871,8 +871,8 @@ def encodeFiles(output, output_extension, in_files, ffmpeg_input_options, tempo)
     for f in in_files:
         exitIfMissing(f)
 
-    if not ffmpeg_output_profiles.has_key(output_extension):
-        print "Error: '%s' is of unknown resulting file format: %s" % (output, output_extension)
+    if output_extension not in ffmpeg_output_profiles:
+        print("Error: '%s' is of unknown resulting file format: %s" % (output, output_extension))
         sys.exit(1)
 
     # Pick ffmpeg output parameters based on output filetype
@@ -903,25 +903,25 @@ def encodeFiles(output, output_extension, in_files, ffmpeg_input_options, tempo)
     runOrDie("rm -f %s ; ( %s ) %s | %s %s -y %s -i - %s %s %s" % (shellQuote(error_filename), player_command, sox_pipe, ffmpeg_program, ffmpeg_verbosity, intermediate_format_options, output_format_options, shellQuote(output), null_pipe), error_message="Encoding failed")
 
     if os.path.exists(error_filename):
-        print ""
-        print "Failed to decode input files!"
-        print ""
-        print "Suggestion: specify ffmpeg input options with '--ffmpeg_input_format_options'"
-        print ""
-        print "  Note: these options will be applied to _all_ input files"
-        print ""
-        print "Suggestion 2: try manually converting that one file with another tool to a .wav file and use it to replace the broken input file"
-        print ""
-        print "  ie: mplayer <file unreadable by ffmpeg> -ao pcm:file=tmp.wav; ffmpeg -y -i tmp.wav -f wav out.wav"
-        print ""
-        print "  Doing the second conversion with ffmpeg probably won't make a difference except for the paranoid"
-        print ""
-        print "Suggestion 3: Use mythffmpeg instead of ffmpeg by adjusting ffmpeg_program at the top of this file"
-        print ""
+        print("")
+        print("Failed to decode input files!")
+        print("")
+        print("Suggestion: specify ffmpeg input options with '--ffmpeg_input_format_options'")
+        print("")
+        print("  Note: these options will be applied to _all_ input files")
+        print("")
+        print("Suggestion 2: try manually converting that one file with another tool to a .wav file and use it to replace the broken input file")
+        print("")
+        print("  ie: mplayer <file unreadable by ffmpeg> -ao pcm:file=tmp.wav; ffmpeg -y -i tmp.wav -f wav out.wav")
+        print("")
+        print("  Doing the second conversion with ffmpeg probably won't make a difference except for the paranoid")
+        print("")
+        print("Suggestion 3: Use mythffmpeg instead of ffmpeg by adjusting ffmpeg_program at the top of this file")
+        print("")
         os.unlink(error_filename)
         sys.exit(1)
 
-    print "Success!"
+    print("Success!")
 
 def combineAndEncode(output, in_files, ffmpeg_input_options="", tempo="1.0"):
     # Get output file extension
@@ -947,7 +947,7 @@ def reEncode(output_dir, audio_ext, in_files, ffmpeg_input_options, tempo):
         if extension == audio_ext:
             copyMetaData(f, output_file)
         else:
-            print "Warning: Copying metadata between differing formats is unsupported"
+            print("Warning: Copying metadata between differing formats is unsupported")
 
 
 def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
@@ -961,17 +961,17 @@ def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
     try:
         cl.populateFromChapterFile(chapter_txt)
     except:
-        print "Error: unable to parse chapter list: " + chapter_txt
+        print("Error: unable to parse chapter list: " + chapter_txt)
         sys.exit(1)
 
     chaps = []
     if not chapter_index:
-        chaps.extend(range(1, cl.size() + 1))
+        chaps.extend(list(range(1, cl.size() + 1)))
     else:
         # turn "1,3-5,7,9-11" into [1, 3, 4, 5, 7, 9, 10, 11]
         for chap_range in chapter_index.split(','):
             chap_boundaries = chap_range.split('-')
-            chaps.extend(range(int(chap_boundaries[0]), int(chap_boundaries[len(chap_boundaries) - 1]) + 1))
+            chaps.extend(list(range(int(chap_boundaries[0]), int(chap_boundaries[len(chap_boundaries) - 1]) + 1)))
     for i in chaps:
         chapter = cl.getChapter(i)
 
@@ -979,7 +979,7 @@ def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
         #  -> doing some rough checks, it appears to match quicktime on windows
 
         #  Documentation says it only seeks to second boundaries, but seeking to fractional seconds works
-        print "Playing chapter %d (%s)" % (i, chapter.name)
+        print("Playing chapter %d (%s)" % (i, chapter.name))
 
         # Different methods to play the file
         # TODO: add back play duration support (I think only mplayer supports this)
@@ -1059,7 +1059,7 @@ class AudioBook:
         self.setCoverArt(art_file)
         self.postProcess()
 
-        print "Success!"
+        print("Success!")
 
     def getMetaData(self):
         exitIfMissing(self.audio_file)
@@ -1144,7 +1144,7 @@ class M4bAudioBook(AudioBook):
         title = ""
         trackTitle = ""
 
-        (status, output) = commands.getstatusoutput("mp4info %s" % shellQuote(self.audio_file))
+        (status, output) = subprocess.getstatusoutput("mp4info %s" % shellQuote(self.audio_file))
 
         for line in output.split("\n"):
             title_ret = re.search(" Name: (.*)", line)
@@ -1162,7 +1162,7 @@ class M4bAudioBook(AudioBook):
         if author and title:
             return (author, title, trackTitle)
         else:
-            print "Error getting metadata from: " + self.audio_file
+            print("Error getting metadata from: " + self.audio_file)
             sys.exit(1)
 
     def getCoverArt(self):
@@ -1261,7 +1261,7 @@ class MkaAudioBook(AudioBook):
         #runOrDie("ffmpeg -i %s -dash 1 -codec copy %s" % (shellQuote(self.audio_file), shellQuote(temp_file)))
         #shutil.move(temp_file, self.audio_file)
 
-        print "postProcess: unsupported for mka"
+        print("postProcess: unsupported for mka")
 
     def getMetaData(self):
 
@@ -1272,7 +1272,7 @@ class MkaAudioBook(AudioBook):
         trackTitle = "" # TODO
 
         # First the info
-        (status, output) = commands.getstatusoutput("mkvinfo %s" % shellQuote(self.audio_file))
+        (status, output) = subprocess.getstatusoutput("mkvinfo %s" % shellQuote(self.audio_file))
 
         for line in output.split("\n"):
             title_ret = re.search("Title: (.*)", line)
@@ -1282,7 +1282,7 @@ class MkaAudioBook(AudioBook):
                 trackTitle = title
 
         # Now for the tags
-        (status, xml_output) = commands.getstatusoutput("mkvextract tags %s" % shellQuote(self.audio_file))
+        (status, xml_output) = subprocess.getstatusoutput("mkvextract tags %s" % shellQuote(self.audio_file))
 
         try:
             # Get the artist
@@ -1299,7 +1299,7 @@ class MkaAudioBook(AudioBook):
         if author and title:
             return (author, title, trackTitle)
         else:
-            print "Error getting metadata from: " + self.audio_file
+            print("Error getting metadata from: " + self.audio_file)
             sys.exit(1)
 
     def getCoverArt(self):
@@ -1332,7 +1332,7 @@ class FLACPicture:
         elif pil_format == 'PNG':
             ret = 'image/png'
         else:
-            print "Error, unknown mime type for: " + pil_format
+            print("Error, unknown mime type for: " + pil_format)
 
         return ret;
 
@@ -1344,7 +1344,7 @@ class FLACPicture:
         elif mime_type == 'image/png':
             ret = 'png'
         else:
-            print "Error, unknown file extension for: " + mime_type
+            print("Error, unknown file extension for: " + mime_type)
 
         return ret;
 
@@ -1364,10 +1364,10 @@ class FLACPicture:
             'F':     32,
         }
 
-        if mode_to_bpp.has_key(pil_mode):
+        if pil_mode in mode_to_bpp:
             return mode_to_bpp[pil_mode]
         else:
-            print "Unknown depth from mode: " + pil_mode
+            print("Unknown depth from mode: " + pil_mode)
             return 0
 
     def encode(self, filename):
@@ -1391,10 +1391,10 @@ class FLACPicture:
         encoded_data = base64.b64encode(picture_data)
 
         # TODO: use a logging module?
-        print "Picture width: %d" % picture.width
-        print "Picture height: %d" % picture.height
-        print "Picture format: %s" % pil_image.format
-        print "Picture depth: %d" % picture.depth
+        print("Picture width: %d" % picture.width)
+        print("Picture height: %d" % picture.height)
+        print("Picture format: %s" % pil_image.format)
+        print("Picture depth: %d" % picture.depth)
 
         return encoded_data
 
@@ -1433,7 +1433,7 @@ class MutagenAudioBook(AudioBook):
                 (key, value) = line.split('=')
                 self.mutagen_book[key] = value
             else:
-                print "Unexpected line from key/value: " + line
+                print("Unexpected line from key/value: " + line)
 
     def setChapters(self, chapter_txt):
 
@@ -1483,7 +1483,7 @@ class MutagenAudioBook(AudioBook):
 
         AudioBook.postProcess(self)
 
-        print "postProcess: unsupported for " + self.chapter_format
+        print("postProcess: unsupported for " + self.chapter_format)
 
     def getMetaData(self):
 
@@ -1495,17 +1495,17 @@ class MutagenAudioBook(AudioBook):
 
         self._loadBook()
 
-        if self.mutagen_book.has_key('ARTIST'):
+        if 'ARTIST' in self.mutagen_book:
             author = self.mutagen_book['ARTIST']
-        if self.mutagen_book.has_key('ALBUM'):
+        if 'ALBUM' in self.mutagen_book:
             title = self.mutagen_book['ALBUM']
-        if self.mutagen_book.has_key('TITLE'):
+        if 'TITLE' in self.mutagen_book:
             trackTitle  = self.mutagen_book['TITLE']
 
         if author and title:
             return (author, title, trackTitle)
         else:
-            print "Error getting metadata from: " + self.audio_file
+            print("Error getting metadata from: " + self.audio_file)
             sys.exit(1)
 
     def getCoverArt(self):
@@ -1516,7 +1516,7 @@ class MutagenAudioBook(AudioBook):
 
         image_names = []
 
-        if self.mutagen_book.has_key('METADATA_BLOCK_PICTURE'):
+        if 'METADATA_BLOCK_PICTURE' in self.mutagen_book:
 
             # Just for generating filenames...
             count = 0
@@ -1529,7 +1529,7 @@ class MutagenAudioBook(AudioBook):
                 count += 1
 
         else:
-            print 'Book does not contain cover art'
+            print('Book does not contain cover art')
 
         return image_names
 
@@ -1626,7 +1626,7 @@ def setTempo(audio_file, in_file, ffmpeg_input_format_options="", tempo="1.0"):
     os.unlink(chapter_txt)
     out_book.postProcess()
 
-    print "Success!"
+    print("Success!")
 
 
 def extractTracks(audio_file, chapter_format, chapter_file, output_dir):
@@ -1671,9 +1671,9 @@ def extractTracks(audio_file, chapter_format, chapter_file, output_dir):
 def validateDependencies(progs):
 
     for p in progs:
-        (status, output) = commands.getstatusoutput("which " + p)
+        (status, output) = subprocess.getstatusoutput("which " + p)
         if status != 0:
-            print "Warning: %s not found" % p
+            print("Warning: %s not found" % p)
 
 def usage():
     usage_text="""
@@ -1706,14 +1706,14 @@ def usage():
   Supported cd backends (cd_backend): cdparanoia, icedax
 
 """
-    print usage_text
+    print(usage_text)
 
 
 
 if __name__ == "__main__":
 
     # Check for command line dependencies (only warn user)
-    validateDependencies(cmd_line_dependencies.keys())
+    validateDependencies(list(cmd_line_dependencies.keys()))
 
     try:
         subcommand = sys.argv[1]

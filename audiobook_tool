@@ -76,12 +76,6 @@ import base64
 import xml.etree.ElementTree
 
 try:
-    import DiscID
-    import CDDB
-except:
-    print("Warning: missing CDDB or DiscID support")
-
-try:
     # Keep tagpy code around for reference, but don't require it
     import tagpy
     have_tagpy = True
@@ -596,6 +590,23 @@ def ChapterListFactory(chapter_format="", filename=""):
             print("Unsupported chapter type: " + chapter_format)
             sys.exit(1)
 
+def getCdInfo(cd_device):
+    """Get discid and number of tracks"""
+
+    try:
+        import libdiscid
+        disc = libdiscid.read(device=cd_device)
+        disc_id = disc.id
+        num_tracks = disc.last_track - disc.first_track + 1
+        return disc_id, num_tracks
+    except ImportError:
+        print("libdiscid module not found")
+        sys.exit(1)
+    except:
+        print("Unable to read disc id")
+        sys.exit(1)
+
+
 
 def getCdTrackList(cd_device, track_count_offset):
     """Try to get a track listing from cddb.
@@ -603,12 +614,13 @@ def getCdTrackList(cd_device, track_count_offset):
     """
 
     # Query the disc for disc info, and use the info to query FreeDB.org
-    cd = DiscID.open(cd_device)
-    disc_id = DiscID.disc_id(cd)
-    num_tracks = disc_id[1]
+
+    (disc_id, num_tracks) = getCdInfo(cd_device)
+
     print("Num tracks: %d" % num_tracks)
     lookup_successful = True
     try:
+        import CDDB
         (query_status, query_info) = CDDB.query(disc_id, client_name='audiobook_tool',
                 client_version=1.0, host='localhost', user='audiobook_tool_user')
         if query_status == 211:
@@ -626,6 +638,9 @@ def getCdTrackList(cd_device, track_count_offset):
         lookup_successful = False
     except ValueError:
         print("Warning: invalid cddb response... using generic track names")
+        lookup_successful = False
+    except ImportError:
+        print("Warning: missing CDDB support")
         lookup_successful = False
 
     # Populate a structure of lists to return to the user

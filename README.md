@@ -93,3 +93,8 @@ https://manual.audacityteam.org/man/splitting_a_recording_into_separate_tracks.h
 
 If the source file is large, exporting to flac works well (ie: wav
 files seem to have a 6GB filesize max)
+
+# Other projects
+
+* http://audiotools.sourceforge.net/ (doesn't seem to handle chapters)
+

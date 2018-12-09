@@ -7,6 +7,10 @@
 # Collection of common functions and tasks when authoring audiobook files
 # See the usage for more documentation
 
+# TODO: what's the python convention for setting this
+AUDIOBOOK_VERSION="1.2"
+AUDIOBOOK_CONTACT="wberrier@gmail.com"
+
 ####################################################
 # ffmpeg output settings for combine_and_encode
 ffmpeg_program="ffmpeg"
@@ -607,60 +611,106 @@ def getCdInfo(cd_device):
         sys.exit(1)
 
 
+# TODO: have a track name metadata interface, and support multiple backends?
+
+class MusicBrainzMetadata:
+    """Helper to query from structure"""
+    def __init__(self, info):
+        self.info = info
+
+    # TODO: use properties for these?
+
+    def get_album_title(self):
+
+        result = ''
+
+        result += self.info['artist-credit-phrase']
+
+        result += ' - ' + self.info['title']
+
+        # TODO: safe to assume these indicies?
+        result += ' (' + self.info['release-event-list'][0]['area']['iso-3166-1-code-list'][0]  + ')'
+
+        return result
+
+    def get_track_titles(self):
+        results = []
+
+        # TODO: safe to assume these indicies?
+        for track in self.info['medium-list'][0]['track-list']:
+            results.append(track['recording']['title'])
+
+        return results
 
 def getCdTrackList(cd_device, track_count_offset):
-    """Try to get a track listing from cddb.
+    """Try to get a track listing from musicbrainz.
     If none found, generate a generic track listing starting from track_count_offset
     """
 
-    # Query the disc for disc info, and use the info to query FreeDB.org
+    # Query the disc for disc info, and use the info to query musicbrainz
 
     (disc_id, num_tracks) = getCdInfo(cd_device)
 
     print("Num tracks: %d" % num_tracks)
-    lookup_successful = True
+    metadata = None
+
     try:
-        import CDDB
-        (query_status, query_info) = CDDB.query(disc_id, client_name='audiobook_tool',
-                client_version=1.0, host='localhost', user='audiobook_tool_user')
-        if query_status == 211:
-            print("Multiple discs found in CDDB:")
-            for i in range(0, len(query_info)):
-                print("%d: %s" % (i + 1, query_info[i]['title']))
-            answer = askQuestion("Which select which disc? (blank for none) [1-%d]" % len(query_info))
-            i = int(answer) - 1
-            (cat, id) = [query_info[i]['category'], query_info[i]['disc_id']]
-        elif query_status == 200:
-            print("Found match in CDDB!")
-            (cat,id) = [query_info['category'], query_info['disc_id']]
-    except IOError:
-        print("Warning: failed to connect internet database... using generic track names")
-        lookup_successful = False
-    except ValueError:
-        print("Warning: invalid cddb response... using generic track names")
-        lookup_successful = False
+        import musicbrainzngs
+        musicbrainzngs.set_useragent('audiobook_tool', AUDIOBOOK_VERSION, AUDIOBOOK_CONTACT)
+
+        releases = musicbrainzngs.get_releases_by_discid(
+            disc_id, includes=["artists", "recordings"])
+
+        num_releases = len(releases['disc']['release-list'])
+
+        selection_index = None
+
+        if num_releases > 1:
+            print("Multiple discs found:")
+
+            for index, release in enumerate(releases['disc']['release-list']):
+                metadata_attempt = MusicBrainzMetadata(release)
+                print("%d: %s" % (index + 1, metadata_attempt.get_album_title()))
+
+            answer = askQuestion("Which select which disc? (blank for none) [1-%d]" % num_releases)
+            if answer != '':
+                selection_index = int(answer) - 1
+        elif num_releases == 1:
+            selection_index = 0
+
+        # NOTE: can't check for True, since zero is valid (but False)
+        if selection_index is not None:
+            metadata = MusicBrainzMetadata(releases['disc']['release-list'][selection_index])
+
+    except musicbrainzngs.MusicBrainzError:
+        print("Warning: failed to retrieve metadata from database...")
+    except KeyError:
+        print("Warning: unable to parse metadata...")
+    except IndexError:
+        print("Warning: unable to parse metadata...")
     except ImportError:
-        print("Warning: missing CDDB support")
-        lookup_successful = False
+        print("Warning: missing musicbrainzngs module...")
 
     # Populate a structure of lists to return to the user
     # (may be extended if more info is needed from the cddb lookup)
     track_list = []
 
     # If we found a match...
-    if lookup_successful and query_status in [211, 200]:
-        (read_status, read_info) = CDDB.read(cat, id, client_name='audiobook_tool', client_version=1.0,
-                host='localhost', user='audiobook_tool_user')
-        for i in range(0, num_tracks):
-            title_key = "TTITLE%d" % i
-            if title_key in read_info:
-                track_list.append(read_info[title_key])
-            else:
-                print("Error: actual cd has %d tracks, but metadata from cddb has less than this" % num_tracks)
-                sys.exit(1)
+    if metadata:
+        print("Using metadata: " + metadata.get_album_title())
+
+        num_tracks_metadata = len(metadata.get_track_titles())
+
+        if num_tracks != num_tracks_metadata:
+            print("Error: actual cd has %d tracks, but metadata from database %d tracks" % (num_tracks, num_tracks_metadata))
+            sys.exit(1)
+
+        for track_title in metadata.get_track_titles():
+            track_list.append(track_title)
 
     # We didn't find a match... generate the track listing manually
     else:
+        print("Using generic track names")
         for i in range(1, num_tracks + 1):
             track_list.append("Track %d" % (i + track_count_offset))
 

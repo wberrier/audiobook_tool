@@ -682,14 +682,14 @@ def getCdTrackList(cd_device, track_count_offset):
         if selection_index is not None:
             metadata = MusicBrainzMetadata(releases['disc']['release-list'][selection_index])
 
+    except ImportError:
+        print("Warning: missing musicbrainzngs module...")
     except musicbrainzngs.MusicBrainzError:
         print("Warning: failed to retrieve metadata from database...")
     except KeyError:
         print("Warning: unable to parse metadata...")
     except IndexError:
         print("Warning: unable to parse metadata...")
-    except ImportError:
-        print("Warning: missing musicbrainzngs module...")
 
     # Populate a structure of lists to return to the user
     # (may be extended if more info is needed from the cddb lookup)

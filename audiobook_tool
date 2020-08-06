@@ -7,65 +7,6 @@
 # Collection of common functions and tasks when authoring audiobook files
 # See the usage for more documentation
 
-# TODO: what's the python convention for setting this
-AUDIOBOOK_VERSION="1.2"
-AUDIOBOOK_CONTACT="wberrier@gmail.com"
-
-####################################################
-# ffmpeg output settings for combine_and_encode
-ffmpeg_program="ffmpeg"
-output_bitrate="32000"
-output_channels="1"
-
-ffmpeg_verbosity="-v warning"
-# avconv's logging levels don't work, but ffmpeg's do.
-# When the logging levels work, the null_pipe isn't needed and warnings
-# are more apparent.
-null_pipe="2>/dev/null"
-
-# ffmpeg profiles
-#  This program is focused on m4b,
-#   but you can use it to encode to mp3/ogg and/or other ffmpeg codecs
-# For ffmpeg aac notes: http://ffmpeg.org/trac/ffmpeg/wiki/AACEncodingGuide
-# TODO: to support multiple versions of ffmpeg, we'd need to auto detect the aac codec name
-# also, older versions don't support named logging levels (only numbers)
-# NOTE: most profiles use 22050 since that's mono cd quality
-ffmpeg_output_profiles = {
-    '.mp3': { 'codec': 'libmp3lame', 'format': 'mp3',      'sample_rate': '22050', 'options': '' },
-    '.m4b': { 'codec': 'aac',        'format': 'mp4',      'sample_rate': '22050', 'options': '-strict experimental -cutoff 15000' },
-    '.ogg': { 'codec': 'libvorbis',  'format': 'ogg',      'sample_rate': '22050', 'options': '' },
-    '.opus':{ 'codec': 'libopus',    'format': 'opus',     'sample_rate': '24000', 'options': '' },
-    # webm requires 24000 sample rate, and it looks like ffmpeg is requiring that of libopus in matroska format
-    '.mka': { 'codec': 'libopus',    'format': 'matroska', 'sample_rate': '24000', 'options': '' },
-}
-#
-####################################################
-
-####################################################
-# external programs this program depends on
-cmd_line_dependencies = {
-    ffmpeg_program: '',
-    #'ffplay': '',
-    'mplayer': '',
-    'mp4chaps': '',
-    'mp4art': '',
-    'mp4tags': '',
-    'mp4file': '',
-    'mp4info': '',
-    'soxi': '',
-    'sox': '', # needed for tempo
-    'cdparanoia': '',
-    'icedax': '',
-    'cd-discid': '', # needed for the icedax ripper
-    'eject': '',
-    'wc': '', # needed to compute input length
-    'mkvpropedit': '',
-    'mkvextract': '',
-    'mkvinfo': '',
-}
-#
-####################################################
-
 import sys
 import os
 import re
@@ -83,29 +24,96 @@ try:
     # Keep tagpy code around for reference, but don't require it
     import tagpy
     have_tagpy = True
-except:
+except Exception:
     have_tagpy = False
+
+# TODO: what's the python convention for setting this
+AUDIOBOOK_VERSION = "1.2"
+AUDIOBOOK_CONTACT = "wberrier@gmail.com"
+
+####################################################
+# ffmpeg output settings for combine_and_encode
+ffmpeg_program = "ffmpeg"
+output_bitrate = "32000"
+output_channels = "1"
+
+ffmpeg_verbosity = "-v warning"
+# avconv's logging levels don't work, but ffmpeg's do.
+# When the logging levels work, the null_pipe isn't needed and warnings
+# are more apparent.
+null_pipe = "2>/dev/null"
+
+# ffmpeg profiles
+#  This program is focused on m4b,
+#   but you can use it to encode to mp3/ogg and/or other ffmpeg codecs
+# For ffmpeg aac notes: http://ffmpeg.org/trac/ffmpeg/wiki/AACEncodingGuide
+# TODO: to support multiple versions of ffmpeg, we'd need to auto detect the aac codec name
+# also, older versions don't support named logging levels (only numbers)
+# NOTE: most profiles use 22050 since that's mono cd quality
+ffmpeg_output_profiles = {
+    '.mp3':  {'codec': 'libmp3lame', 'format': 'mp3',      'sample_rate': '22050', 'options': ''},
+    '.m4b':  {'codec': 'aac',        'format': 'mp4',      'sample_rate': '22050', 'options': '-strict experimental -cutoff 15000'},
+    '.ogg':  {'codec': 'libvorbis',  'format': 'ogg',      'sample_rate': '22050', 'options': ''},
+    '.opus': {'codec': 'libopus',    'format': 'opus',     'sample_rate': '24000', 'options': ''},
+    # webm requires 24000 sample rate, and it looks like ffmpeg is requiring that of libopus in matroska format
+    '.mka':  {'codec': 'libopus',    'format': 'matroska', 'sample_rate': '24000', 'options': ''},
+}
+#
+####################################################
+
+####################################################
+# external programs this program depends on
+cmd_line_dependencies = {
+    ffmpeg_program: '',
+    # 'ffplay': '',
+    'mplayer': '',
+    'mp4chaps': '',
+    'mp4art': '',
+    'mp4tags': '',
+    'mp4file': '',
+    'mp4info': '',
+    'soxi': '',
+    'sox': '',  # needed for tempo
+    'cdparanoia': '',
+    'icedax': '',
+    'cd-discid': '',  # needed for the icedax ripper
+    'eject': '',
+    'wc': '',  # needed to compute input length
+    'mkvpropedit': '',
+    'mkvextract': '',
+    'mkvinfo': '',
+}
+#
+####################################################
+
 
 def shellQuote(str):
     return "'" + str.replace("'", "'\\''") + "'"
 
+
 class LengthRetrievalError(Exception):
     def __init__(self, value):
         self.value = value
+
     def __str__(self):
         return repr(self.value)
+
 
 class WavConversionError(Exception):
     def __init__(self, value):
         self.value = value
+
     def __str__(self):
         return repr(self.value)
+
 
 class ChapterListFormatError(Exception):
     def __init__(self, value):
         self.value = value
+
     def __str__(self):
         return repr(self.value)
+
 
 def lengthInSecondsFFmpeg(file,  ffmpeg_output_profile, tempo="1.0"):
     """Decode input using ffmpeg to determine the length of the input
@@ -136,20 +144,23 @@ def lengthInSecondsFFmpeg(file,  ffmpeg_output_profile, tempo="1.0"):
 
     # put this in a try block to help catch invalid output
     try:
-        results = float(output)/(float(output_rate)*float(output_channels)*2.0) # 2 because 16 bits per sample, or 2 bytes per sample
-    except:
+        results = float(output)/(float(output_rate)*float(output_channels)*2.0)  # 2 because 16 bits per sample, or 2 bytes per sample
+    except Exception:
         print("Command: " + command)
         print("Output: " + output)
         raise WavConversionError("Unable to convert file to .wav: " + file)
     return results
 
+
 # Interesting bits:
-#Sample Rate    : 22050
-#Duration       : 00:04:51.92 = 6436800 samples ~ 21893.9 CDDA sectors
-#soxi_duration_re = re.compile("Sample Rate\s+: (\d+).*Duration\s+: \d\d:\d\d:\d\d\.\d\d = (\d+) samples")
+# Sample Rate    : 22050
+# Duration       : 00:04:51.92 = 6436800 samples ~ 21893.9 CDDA sectors
+# soxi_duration_re = re.compile("Sample Rate\s+: (\d+).*Duration\s+: \d\d:\d\d:\d\d\.\d\d = (\d+) samples")
 # Fine, break into two regexes, since I can't seem to match both in one pass (even with re.DOTALL)
-soxi_sample_rate_re = re.compile("Sample Rate\s+: (\d+)")
-soxi_duration_re = re.compile("Duration\s+: \d\d:\d\d:\d\d\.\d\d = (\d+) samples")
+soxi_sample_rate_re = re.compile(r"Sample Rate\s+: (\d+)")
+soxi_duration_re = re.compile(r"Duration\s+: \d\d:\d\d:\d\d\.\d\d = (\d+) samples")
+
+
 def lengthInSecondsSoxi(file, ffmpeg_output_profile, tempo="1.0"):
     """
     Use soxi to determine wave file lengths, and ffmpeg decoding for all others.
@@ -170,7 +181,7 @@ def lengthInSecondsSoxi(file, ffmpeg_output_profile, tempo="1.0"):
         try:
             (sample_rate,) = soxi_sample_rate_re.search(output).groups()
             (num_samples,) = soxi_duration_re.search(output).groups()
-        except:
+        except Exception:
             raise LengthRetrievalError("Failed to parse: " + output)
         seconds = num_samples / sample_rate
         # TODO: check to see if "seconds = float(num_samples) / (float(sample_rate) * float(tempo))"
@@ -183,6 +194,7 @@ def lengthInSecondsSoxi(file, ffmpeg_output_profile, tempo="1.0"):
 #   (one hundred of a second rounding for a hundred chapters: could be 1 second off!)
 # -> shelling out to soxi is probably sufficient
 
+
 def runOrDie(command, error_message=""):
     print("Running: " + command)
     ret = os.system(command)
@@ -192,16 +204,19 @@ def runOrDie(command, error_message=""):
             print("Error: " + error_message)
         sys.exit(1)
 
+
 def askQuestion(question):
     print(question)
-    answer=input()
+    answer = input()
     print("answer='%s'" % answer)
     return answer
+
 
 def exitIfMissing(filename):
     if not os.path.exists(filename):
         print("Error: file does not exist: " + filename)
         sys.exit(1)
+
 
 class Chapter:
     def __init__(self, index, timeMark, name):
@@ -238,8 +253,10 @@ class M4bChapter(Chapter):
     def toString(self):
         return "%s %s" % (self.timeString(), self.name)
 
+
 class CommentFormatChapter(Chapter):
     """This chapter type is shared amongs several containers.  Abstract out to be shared"""
+
     def __init__(self, index, timeMark, name):
         Chapter.__init__(self, index, timeMark, name)
 
@@ -254,8 +271,6 @@ def totalSeconds(hours, minutes, seconds, decimal):
     total_seconds += float(hours) * float(3600) + float(minutes) * 60 + float(seconds) + float("0.%s" % decimal)
 
     return total_seconds
-
-
 
 
 class ChapterList:
@@ -287,7 +302,7 @@ class ChapterList:
                 name = tagpy.FileRef(filename).tag().title
                 # Encode from unicode to utf-8 so it can be written to file
                 name = name.encode("utf-8")
-            except:
+            except Exception:
                 print("tagpy: unable to get track title from: " + filename)
 
         # If no track title found, use the filename
@@ -354,13 +369,13 @@ class M4bChapterList(ChapterList):
     def populateFromChapterOutput(self, output):
         """Parse output to populate the chapter info"""
 
-        chapter_line_re = re.compile("(\d\d):(\d\d):(\d\d).(\d\d\d) (.*)")
+        chapter_line_re = re.compile(r"(\d\d):(\d\d):(\d\d).(\d\d\d) (.*)")
 
         count = 0
         for line in output.split('\n'):
 
             # skip whitespace only lines (some editors love to put blank lines at the end of files)
-            matches = re.search("^\s*$", line)
+            matches = re.search(r"^\s*$", line)
             if matches:
                 continue
 
@@ -377,11 +392,10 @@ class M4bChapterList(ChapterList):
 
             count = count + 1
 
-
     def populateFromAudioFile(self, filename):
         """ Specialied method """
 
-        no_chapters_re = re.compile("File .* does not contain chapters of type QuickTime and Nero")
+        no_chapters_re = re.compile(r"File .* does not contain chapters of type QuickTime and Nero")
 
         # TODO: mp4chaps actually supports "--export" to do this thing
         (status, output) = subprocess.getstatusoutput("mp4chaps --list %s" % shellQuote(filename))
@@ -392,7 +406,7 @@ class M4bChapterList(ChapterList):
 
         # This is the format given from mp4chap
         # Example: Chapter #030 - 19:00:40.111 - "Chapter 30"
-        exported_chapter_line_re = re.compile("\tChapter #\d\d\d - (\d\d):(\d\d):(\d\d).(\d\d\d) - \"(.*)\"")
+        exported_chapter_line_re = re.compile(r"\tChapter #\d\d\d - (\d\d):(\d\d):(\d\d).(\d\d\d) - \"(.*)\"")
 
         # Skip first line
         count = -1
@@ -405,7 +419,6 @@ class M4bChapterList(ChapterList):
             total_seconds = totalSeconds(hours, minutes, seconds, milliseconds)
 
             self.addChapter(self.chapter_type(count, total_seconds, chapter_name))
-
 
 
 class CommentFormatChapterList(ChapterList):
@@ -428,8 +441,8 @@ class CommentFormatChapterList(ChapterList):
 
             index_str = "%03d" % count
 
-            chapter_line_time_re = re.compile("CHAPTER%s=(\d\d):(\d\d):(\d\d).(\d\d\d)" % index_str)
-            chapter_line_name_re = re.compile("CHAPTER%sNAME=(.*)" % index_str)
+            chapter_line_time_re = re.compile(r"CHAPTER%s=(\d\d):(\d\d):(\d\d).(\d\d\d)" % index_str)
+            chapter_line_name_re = re.compile(r"CHAPTER%sNAME=(.*)" % index_str)
 
             if line_type == "time":
 
@@ -495,7 +508,7 @@ class MutagenChapterList(CommentFormatChapterList):
             chapter_name_tag = "CHAPTER%03dNAME" % chapter_count
 
             if chapter_time_tag in mutagen_file and chapter_name_tag in mutagen_file:
-                #print "Found chapter tags for: %d" % chapter_count
+                # print "Found chapter tags for: %d" % chapter_count
                 chapter_output += chapter_time_tag + '=' + mutagen_file[chapter_time_tag][0] + '\n'
                 chapter_output += chapter_name_tag + '=' + mutagen_file[chapter_name_tag][0] + '\n'
             else:
@@ -504,6 +517,7 @@ class MutagenChapterList(CommentFormatChapterList):
             chapter_count = chapter_count + 1
 
         self.populateFromChapterOutput(chapter_output)
+
 
 class OggChapterList(MutagenChapterList):
     def __init__(self):
@@ -538,6 +552,7 @@ class MP3ChapterList:
     def toFile(self, filename):
         print("Warning: mp3 chapters not supported: chapters not saved")
         open(filename, 'w').write("")
+
 
 def AudioBookFactory(filename):
     """Get the appropriate book object for the format"""
@@ -594,6 +609,7 @@ def ChapterListFactory(chapter_format="", filename=""):
             print("Unsupported chapter type: " + chapter_format)
             sys.exit(1)
 
+
 def getCdInfo(cd_device):
     """Get discid and number of tracks"""
 
@@ -606,7 +622,7 @@ def getCdInfo(cd_device):
     except ImportError:
         print("libdiscid module not found")
         sys.exit(1)
-    except:
+    except Exception:
         print("Unable to read disc id")
         sys.exit(1)
 
@@ -615,6 +631,7 @@ def getCdInfo(cd_device):
 
 class MusicBrainzMetadata:
     """Helper to query from structure"""
+
     def __init__(self, info):
         self.info = info
 
@@ -629,7 +646,7 @@ class MusicBrainzMetadata:
         result += ' - ' + self.info['title']
 
         # TODO: safe to assume these indicies?
-        result += ' (' + self.info['release-event-list'][0]['area']['iso-3166-1-code-list'][0]  + ')'
+        result += ' (' + self.info['release-event-list'][0]['area']['iso-3166-1-code-list'][0] + ')'
 
         return result
 
@@ -642,16 +659,10 @@ class MusicBrainzMetadata:
 
         return results
 
-def getCdTrackList(cd_device, track_count_offset):
-    """Try to get a track listing from musicbrainz.
-    If none found, generate a generic track listing starting from track_count_offset
-    """
 
-    # Query the disc for disc info, and use the info to query musicbrainz
+def getCdMetaData(disc_id):
+    """Get metadata from musicbrainz if the module is available"""
 
-    (disc_id, num_tracks) = getCdInfo(cd_device)
-
-    print("Num tracks: %d" % num_tracks)
     metadata = None
 
     try:
@@ -691,9 +702,24 @@ def getCdTrackList(cd_device, track_count_offset):
     except IndexError:
         print("Warning: unable to parse metadata...")
 
+    return metadata
+
+
+def getCdTrackList(cd_device, track_count_offset):
+    """Try to get a track listing from musicbrainz.
+    If none found, generate a generic track listing starting from track_count_offset
+    """
+
+    # Query the disc for disc info, and use the info to query musicbrainz
+
+    (disc_id, num_tracks) = getCdInfo(cd_device)
+
+    print("Num tracks: %d" % num_tracks)
     # Populate a structure of lists to return to the user
     # (may be extended if more info is needed from the cddb lookup)
     track_list = []
+
+    metadata = getCdMetaData(disc_id)
 
     # If we found a match...
     if metadata:
@@ -716,15 +742,16 @@ def getCdTrackList(cd_device, track_count_offset):
 
     return track_list
 
+
 # NOTE: not sure there's any advantage between these backends
 # (icedax (cdrkit) was a fork of cdda2wav (cdrtools) a while back)
 # supposedly the cdrtools cdda2wav some some advantages over the below,
 # (see: https://unix.stackexchange.com/questions/2442/how-to-rip-scratched-audio-cds)
 # but it's not packaged by default on very many distros
-
 class CdRipperInterface:
     """Interface for ripping cds, could put common code here"""
     pass
+
 
 class CdParanoia(CdRipperInterface):
     def __init__(self, device, ignore_errors):
@@ -750,6 +777,7 @@ class CdParanoia(CdRipperInterface):
 
         return options
 
+
 class IceDax(CdRipperInterface):
     def __init__(self, device, ignore_errors):
         """Interface to use icedax"""
@@ -758,7 +786,7 @@ class IceDax(CdRipperInterface):
 
     def containsDiskCommand(self):
         # TODO: is there a awy to use icedax to do this?
-        #return "icedax --info-only --verbose-level summary %s 2>/dev/null" % self._extraCommandArguments()
+        # return "icedax --info-only --verbose-level summary %s 2>/dev/null" % self._extraCommandArguments()
         # that works if there's a disc in the drive, but if not, it prompts
         return "cd-discid %s > /dev/null" % self.device
 
@@ -769,7 +797,7 @@ class IceDax(CdRipperInterface):
     def _extraCommandArguments(self):
         """Private method to get some options"""
 
-        #options = " -g " # More easily parsable output?
+        # options = " -g " # More easily parsable output?
         options = ""
 
         if self.device:
@@ -790,6 +818,7 @@ def RipperFactory(name):
     else:
         print("Invalid cd ripper: " + name)
         raise
+
 
 # Rip an audiobook consisting of multiple cds to wav files, one file per track on each disc
 
@@ -845,8 +874,8 @@ def interactivelyRipCds(output, cd_device, ignore_errors, cd_backend, disc_count
                 runOrDie(command_to_run)
 
                 # Testing
-                #print "Running command: " + command_to_run
-                #os.system("touch %s" % shellQuote(track_filename))
+                # print "Running command: " + command_to_run
+                # os.system("touch %s" % shellQuote(track_filename))
 
             track_count += 1
 
@@ -880,17 +909,19 @@ def genChapterList(files, chapter_format, out_file="", tempo="1.0"):
 
     return cl
 
+
 def buildFilesString(files):
     ret = ""
     for f in files:
         ret += " %s" % shellQuote(f)
     return ret
 
+
 def getRipCdOptions(args):
     cd_device = None
     ignore_errors = False
     cd_backend = "cdparanoia"
-    opts, remaining_args = getopt.gnu_getopt(args, "", [ "cd_device=", "ignore_errors", "cd_backend=" ])
+    opts, remaining_args = getopt.gnu_getopt(args, "", ["cd_device=", "ignore_errors", "cd_backend="])
     for option, value in opts:
         if option == "--cd_device":
             cd_device = value
@@ -905,7 +936,7 @@ def getRipCdOptions(args):
 def getEncodeOptions(args):
     ffmpeg_input_format_options = ""
     tempo = "1.0"
-    opts, remaining_args = getopt.gnu_getopt(args, "", [ "ffmpeg_input_format_options=", "tempo=" ])
+    opts, remaining_args = getopt.gnu_getopt(args, "", ["ffmpeg_input_format_options=", "tempo="])
     for option, value in opts:
         if option == "--ffmpeg_input_format_options":
             ffmpeg_input_format_options = value
@@ -988,11 +1019,13 @@ def encodeFiles(output, output_extension, in_files, ffmpeg_input_options, tempo)
 
     print("Success!")
 
+
 def combineAndEncode(output, in_files, ffmpeg_input_options="", tempo="1.0"):
     # Get output file extension
     output_extension = os.path.splitext(output)[1]
 
     encodeFiles(output, output_extension, in_files, ffmpeg_input_options, tempo)
+
 
 def reEncode(output_dir, audio_ext, in_files, ffmpeg_input_options, tempo):
     """Encode a bunch of files"""
@@ -1025,7 +1058,7 @@ def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
 
     try:
         cl.populateFromChapterFile(chapter_txt)
-    except:
+    except Exception:
         print("Error: unable to parse chapter list: " + chapter_txt)
         sys.exit(1)
 
@@ -1051,7 +1084,7 @@ def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
         #  Idea being you can play each track for 1 second to easily scan them
         runOrDie("mplayer -ss %.3f %s >/dev/null 2>&1" % (chapter.timeMark + offset, shellQuote(audio_file)))
 
-        #runOrDie("ffplay -ss %.3f %s 2>/dev/null" % (chapter.timeMark + offset, shellQuote(audio_file)))
+        # runOrDie("ffplay -ss %.3f %s 2>/dev/null" % (chapter.timeMark + offset, shellQuote(audio_file)))
 
 
 def adjustChapter(chapter_format, chapter_txt, chapter_index, seconds, cascade):
@@ -1065,6 +1098,7 @@ def adjustChapter(chapter_format, chapter_txt, chapter_index, seconds, cascade):
     cl.adjustChapterTimeMark(chapter_index, seconds, cascade)
 
     cl.toFile(chapter_txt)
+
 
 def setChapterTempo(chapter_format, chapter_txt, tempo):
 
@@ -1115,7 +1149,7 @@ class AudioBook:
         # Otherwise, all the chapters are generated, which takes some time, only to fail on this step
         combineAndEncode(self.audio_file, in_files, ffmpeg_input_format_options, tempo)
 
-        cl = genChapterList(in_files, self.chapter_format, chapter_txt, tempo)
+        genChapterList(in_files, self.chapter_format, chapter_txt, tempo)
 
         # TODO: break up the chapter lists and combining/encoding if it exceeds the m4b max sample count
 
@@ -1155,7 +1189,7 @@ class M4bAudioBook(AudioBook):
 
         # Put correct chapter file in place if needs be, and clean up afterwards
         #  (TODO: if mp4v2 every gets python bindings, we won't have to do this kind of work around)
-        tool_expected_chapter_file = output_extension = os.path.splitext(self.audio_file)[0] + ".chapters.txt"
+        tool_expected_chapter_file = os.path.splitext(self.audio_file)[0] + ".chapters.txt"
         cleanup = False
         if tool_expected_chapter_file != chapter_txt:
             shutil.copyfile(chapter_txt, tool_expected_chapter_file)
@@ -1180,7 +1214,6 @@ class M4bAudioBook(AudioBook):
         # Itunes audiobooks uses the album as the top level tree, and then the title in the subtree.
         #  TODO: maybe have optional title (song) for when books must be split into two
         runOrDie("mp4tags -i audiobook -artist %s -album %s -song %s %s" % (shellQuote(author), shellQuote(title), shellQuote(trackTitle), shellQuote(self.audio_file)))
-
 
     def setCoverArt(self, image_file):
 
@@ -1319,12 +1352,12 @@ class MkaAudioBook(AudioBook):
         # That doesn't work for Android's exo player
         # This creates an intermediate file, and mkclean isn't widely distributed, so just use ffmpeg method
         # But, it does work
-        #runOrDie("mkclean --keep-cues %s" % (shellQuote(self.audio_file)))
+        # runOrDie("mkclean --keep-cues %s" % (shellQuote(self.audio_file)))
 
         # TODO: this removes a bunch of metadata, not sure it's the best option
-        #temp_file = "tmp." + self.audio_file
-        #runOrDie("ffmpeg -i %s -dash 1 -codec copy %s" % (shellQuote(self.audio_file), shellQuote(temp_file)))
-        #shutil.move(temp_file, self.audio_file)
+        # temp_file = "tmp." + self.audio_file
+        # runOrDie("ffmpeg -i %s -dash 1 -codec copy %s" % (shellQuote(self.audio_file), shellQuote(temp_file)))
+        # shutil.move(temp_file, self.audio_file)
 
         print("postProcess: unsupported for mka")
 
@@ -1334,7 +1367,7 @@ class MkaAudioBook(AudioBook):
 
         author = ""
         title = ""
-        trackTitle = "" # TODO
+        trackTitle = ""  # TODO
 
         # First the info
         (status, output) = subprocess.getstatusoutput("mkvinfo %s" % shellQuote(self.audio_file))
@@ -1358,7 +1391,7 @@ class MkaAudioBook(AudioBook):
                 value = e.find('String').text
                 if name.lower() == "artist":
                     author = value
-        except:
+        except Exception:
             pass
 
         if author and title:
@@ -1381,6 +1414,7 @@ class MkaAudioBook(AudioBook):
         else:
             return [""]
 
+
 class FLACPicture:
     def __init__(self):
 
@@ -1391,7 +1425,7 @@ class FLACPicture:
 
     @staticmethod
     def mime_type(pil_format):
-        ret = "image/" # default for everything else
+        ret = "image/"  # default for everything else
         if pil_format == 'JPEG':
             ret = 'image/jpeg'
         elif pil_format == 'PNG':
@@ -1399,7 +1433,7 @@ class FLACPicture:
         else:
             print("Error, unknown mime type for: " + pil_format)
 
-        return ret;
+        return ret
 
     @staticmethod
     def file_extension(mime_type):
@@ -1411,7 +1445,7 @@ class FLACPicture:
         else:
             print("Error, unknown file extension for: " + mime_type)
 
-        return ret;
+        return ret
 
     @staticmethod
     def depth(pil_mode):
@@ -1446,7 +1480,7 @@ class FLACPicture:
         picture = mutagen.flac.Picture()
 
         picture.data = open(filename, 'rb').read()
-        picture.type = 3 # cover art
+        picture.type = 3  # cover art
         picture.desc = 'audio book cover art'
         picture.mime = self.mime_type(pil_image.format)
         picture.width, picture.height = pil_image.size
@@ -1472,8 +1506,10 @@ class FLACPicture:
 
         return (self.file_extension(picture.mime), picture.data)
 
+
 class MutagenAudioBook(AudioBook):
     """Really just supports types that support ogg/vorbis comment chapters at this point"""
+
     def __init__(self, audio_file):
         AudioBook.__init__(self, audio_file)
 
@@ -1521,8 +1557,8 @@ class MutagenAudioBook(AudioBook):
             trackTitle = title
 
         self.mutagen_book['ARTIST'] = author
-        self.mutagen_book['ALBUM']  = title
-        self.mutagen_book['TITLE']  = trackTitle
+        self.mutagen_book['ALBUM'] = title
+        self.mutagen_book['TITLE'] = trackTitle
 
         self._saveBook()
 
@@ -1565,7 +1601,7 @@ class MutagenAudioBook(AudioBook):
         if 'ALBUM' in self.mutagen_book:
             title = self.mutagen_book['ALBUM']
         if 'TITLE' in self.mutagen_book:
-            trackTitle  = self.mutagen_book['TITLE']
+            trackTitle = self.mutagen_book['TITLE']
 
         if author and title:
             return (author, title, trackTitle)
@@ -1598,6 +1634,7 @@ class MutagenAudioBook(AudioBook):
 
         return image_names
 
+
 class OggAudioBook(MutagenAudioBook):
     def __init__(self, audio_file):
         MutagenAudioBook.__init__(self, audio_file)
@@ -1607,6 +1644,7 @@ class OggAudioBook(MutagenAudioBook):
         import mutagen.oggvorbis
         self.mutagen_type = mutagen.oggvorbis.OggVorbis
 
+
 class OpusAudioBook(MutagenAudioBook):
     def __init__(self, audio_file):
         MutagenAudioBook.__init__(self, audio_file)
@@ -1615,6 +1653,7 @@ class OpusAudioBook(MutagenAudioBook):
 
         import mutagen.oggopus
         self.mutagen_type = mutagen.oggopus.OggOpus
+
 
 class MP3AudioBook(MutagenAudioBook):
     def __init__(self, audio_file):
@@ -1732,7 +1771,6 @@ def extractTracks(audio_file, chapter_format, chapter_file, output_dir):
         runOrDie(command)
 
 
-
 def validateDependencies(progs):
 
     for p in progs:
@@ -1740,8 +1778,9 @@ def validateDependencies(progs):
         if status != 0:
             print("Warning: %s not found" % p)
 
+
 def usage():
-    usage_text="""
+    usage_text = """
 ./audiobook_tool <sub command> <sub command arguments>
 
  Sub commands:
@@ -1774,7 +1813,6 @@ def usage():
     print(usage_text)
 
 
-
 if __name__ == "__main__":
 
     # Check for command line dependencies (only warn user)
@@ -1783,7 +1821,7 @@ if __name__ == "__main__":
     try:
         subcommand = sys.argv[1]
         subcommand_args = sys.argv[2:]
-    except:
+    except Exception:
         usage()
         sys.exit(1)
 
@@ -1798,7 +1836,7 @@ if __name__ == "__main__":
                 (output, disc_num, num_previous_tracks) = subcommand_args
             else:
                 output = subcommand_args[0]
-        except:
+        except Exception:
             usage()
             sys.exit(1)
 
@@ -1813,7 +1851,7 @@ if __name__ == "__main__":
 
             if len(in_files) < 1:
                 raise
-        except:
+        except Exception:
             usage()
             sys.exit(1)
 
@@ -1830,7 +1868,7 @@ if __name__ == "__main__":
 
             if len(in_files) < 1:
                 raise
-        except:
+        except Exception:
             usage()
             sys.exit(1)
 
@@ -1841,7 +1879,7 @@ if __name__ == "__main__":
         # Set some defaults
         tempo = "1.0"
         chapter_format = "m4b"
-        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", [ "tempo=", "format=" ])
+        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", ["tempo=", "format="])
         for option, value in opts:
             if option == "--tempo":
                 tempo = value
@@ -1855,7 +1893,7 @@ if __name__ == "__main__":
             if len(files) < 1:
                 raise
 
-        except:
+        except Exception:
             usage()
             sys.exit(1)
 
@@ -1873,7 +1911,7 @@ if __name__ == "__main__":
         offset = 0.0
         if len(subcommand_args) == 3:
             chapter_index = subcommand_args[2]
-            if not re.search("^\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$", chapter_index):
+            if not re.search(r"^\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$", chapter_index):
                 usage()
                 sys.exit(1)
             subcommand_args.pop()
@@ -1882,7 +1920,7 @@ if __name__ == "__main__":
 
         try:
             (chapter_txt, audio_file) = subcommand_args
-        except:
+        except Exception:
             usage()
             sys.exit(1)
 
@@ -1893,7 +1931,7 @@ if __name__ == "__main__":
         cascade = False
         chapter_format = "m4b"
 
-        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", [ "cascade", "format=" ])
+        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", ["cascade", "format="])
         for option, value in opts:
             if option == "--cascade":
                 cascade = True
@@ -1904,7 +1942,7 @@ if __name__ == "__main__":
             (chapter_txt, chapter_index, seconds) = subcommand_args
             chapter_index = int(chapter_index)
             seconds = float(seconds)
-        except:
+        except Exception:
             usage()
             sys.exit(1)
 
@@ -1914,7 +1952,7 @@ if __name__ == "__main__":
 
         chapter_format = "m4b"
 
-        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", [ "format=" ])
+        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", ["format="])
         for option, value in opts:
             if option == "--format":
                 chapter_format = value
@@ -1922,7 +1960,7 @@ if __name__ == "__main__":
         try:
             (chapter_txt, tempo) = subcommand_args
             tempo = float(tempo)
-        except:
+        except Exception:
             usage()
             sys.exit(1)
 
@@ -1931,7 +1969,7 @@ if __name__ == "__main__":
     elif 'set_chapters' == subcommand:
         try:
             (audio_file, chapter_txt) = subcommand_args
-        except:
+        except Exception:
             usage()
             sys.exit(1)
 
@@ -1942,7 +1980,7 @@ if __name__ == "__main__":
     elif 'get_chapters' == subcommand:
         try:
             (audio_file, chapter_txt) = subcommand_args
-        except:
+        except Exception:
             usage()
             sys.exit(1)
 
@@ -1951,7 +1989,6 @@ if __name__ == "__main__":
         cl = book.getChapters()
 
         cl.toFile(chapter_txt)
-
 
     elif 'set_metadata' == subcommand:
         # Get optional offset
@@ -1962,7 +1999,7 @@ if __name__ == "__main__":
 
         try:
             (audio_file, author, title) = subcommand_args
-        except:
+        except Exception:
             usage()
             sys.exit(1)
 
@@ -1973,7 +2010,7 @@ if __name__ == "__main__":
     elif 'set_coverart' == subcommand:
         try:
             (audio_file, image_file) = subcommand_args
-        except:
+        except Exception:
             usage()
             sys.exit(1)
 
@@ -1984,7 +2021,7 @@ if __name__ == "__main__":
     elif 'get_coverart' == subcommand:
         try:
             (audio_file,) = subcommand_args
-        except:
+        except Exception:
             usage()
             sys.exit(1)
 
@@ -1995,7 +2032,7 @@ if __name__ == "__main__":
     elif 'post_process' == subcommand:
         try:
             (audio_file,) = subcommand_args
-        except:
+        except Exception:
             usage()
             sys.exit(1)
 
@@ -2008,11 +2045,11 @@ if __name__ == "__main__":
 
         try:
             audio_file = subcommand_args[0]
-            author     = subcommand_args[1]
-            title      = subcommand_args[2]
-            art_file   = subcommand_args[3]
-            in_files   = subcommand_args[4:]
-        except:
+            author = subcommand_args[1]
+            title = subcommand_args[2]
+            art_file = subcommand_args[3]
+            in_files = subcommand_args[4:]
+        except Exception:
             usage()
             sys.exit(1)
 
@@ -2024,14 +2061,14 @@ if __name__ == "__main__":
 
         # Parse the options
         ffmpeg_input_format_options = ""
-        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", [ "ffmpeg_input_format_options=" ])
+        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", ["ffmpeg_input_format_options="])
         for option, value in opts:
             if option == "--ffmpeg_input_format_options":
                 ffmpeg_input_format_options = value
 
         try:
             (audio_file, in_file, tempo) = subcommand_args
-        except:
+        except Exception:
             usage()
             sys.exit(1)
 
@@ -2040,7 +2077,7 @@ if __name__ == "__main__":
     elif 'extract_tracks' == subcommand:
         chapter_file = ""
         chapter_format = ""
-        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", [ "chapter_file=", "chapter_format=" ])
+        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", ["chapter_file=", "chapter_format="])
         for option, value in opts:
             if option == "--chapter_file":
                 chapter_file = value
@@ -2049,7 +2086,7 @@ if __name__ == "__main__":
 
         try:
             (audio_file, output_dir) = subcommand_args
-        except:
+        except Exception:
             usage()
             sys.exit(1)
 

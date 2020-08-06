@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+# TODO add a file docstring to use in "usage"
+
 # Author: Wade Berrier  <wberrier@gmail.com>
 
 # License: GPLv2
@@ -22,6 +24,7 @@ import xml.etree.ElementTree
 
 try:
     # Keep tagpy code around for reference, but don't require it
+    # TODO: is this redundant with mutagen?
     import tagpy
     have_tagpy = True
 except Exception:
@@ -88,6 +91,7 @@ cmd_line_dependencies = {
 
 
 def shellQuote(str):
+    """TODO: use shlex?"""
     return "'" + str.replace("'", "'\\''") + "'"
 
 
@@ -788,6 +792,7 @@ class IceDax(CdRipperInterface):
         # TODO: is there a awy to use icedax to do this?
         # return "icedax --info-only --verbose-level summary %s 2>/dev/null" % self._extraCommandArguments()
         # that works if there's a disc in the drive, but if not, it prompts
+        # TODO: replace this with python3-libdiscid?
         return "cd-discid %s > /dev/null" % self.device
 
     def ripCommand(self, track_count, track_filename):

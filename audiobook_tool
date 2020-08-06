@@ -1939,9 +1939,9 @@ if __name__ == "__main__":
                 chapter_format = value
 
         try:
-            (chapter_txt, chapter_index, seconds) = subcommand_args
-            chapter_index = int(chapter_index)
-            seconds = float(seconds)
+            (chapter_txt, chapter_index_str, seconds_str) = subcommand_args
+            chapter_index = int(chapter_index_str)
+            seconds = float(seconds_str)
         except Exception:
             usage()
             sys.exit(1)

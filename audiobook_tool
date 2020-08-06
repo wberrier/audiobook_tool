@@ -183,7 +183,7 @@ def lengthInSecondsSoxi(file, ffmpeg_output_profile, tempo="1.0"):
             (num_samples,) = soxi_duration_re.search(output).groups()
         except Exception:
             raise LengthRetrievalError("Failed to parse: " + output)
-        seconds = num_samples / sample_rate
+        seconds = float(num_samples) / float(sample_rate)
         # TODO: check to see if "seconds = float(num_samples) / (float(sample_rate) * float(tempo))"
         #       would suffice instead of sending the wave file through sox when a tempo is given
 

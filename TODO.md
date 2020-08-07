@@ -29,14 +29,6 @@
 
 * Convert abtpickch to python
 
-* Find alternative to python-cddb (or fix it).  Apparently you can't get track
-  lengths from lookups.
-  * http://audiotools.sourceforge.net/install.html  ?
-  * freedb.py from http://bebop.bigasterisk.com/python/
-  * Raw web queries? They are actually pretty simple...
-    (http://ftp.freedb.org/pub/freedb/latest/CDDBPROTO)
-  * command line 'cddbcmd' tool? (in ubuntu cddb 'package')
-
  One potential problem of just using disc ids to generate chapter
  lists is that the total cd length as reported by cddb is in seconds
  (instead of something more granular).  It would probably be a little

@@ -1,21 +1,36 @@
-#!/usr/bin/perl
+#!/usr/bin/env python3
 
-$bottom = (scalar(@ARGV)?$ARGV[0]:2);
-$top = (scalar(@ARGV)>1?$ARGV[1]:"inf");
-$count = 0;
-while (<STDIN>)
-{
-        chomp;
-        if (/^(\d+)\t(\d+)\t(\d+)\.(\d+)$/ && ($bottom <= $1 / 1000) && ($1 / 1000 <= $top))
-        {
-                $count = $count + 1;
-                ($gap, $chap, $s, $ms)=($1, $2, $3, $4);
+import re
+import sys
 
-                # m4b format
-                printf("%02d:%02d:%02d.%03d Chapter %s (silence %s)\n", $s/3600, ($s/60)%60, $s%60, $ms/10, $chap, $gap);
+# TODO: accept "format" as an argument for chapter format
 
-                # ogg/opus/mka format
-                #printf("CHAPTER%03d=%02d:%02d:%02d.%03d\n", $count, $s/3600, ($s/60)%60, $s%60, $ms/10);
-                #printf("CHAPTER%03dNAME=Chapter %s (silence %s)\n", $count, $chap, $gap);
-        }
-}
+# if args passed in, use first argument, otherwise use 2
+bottom = 2.0
+if len(sys.argv) > 1:
+    bottom = float(sys.argv[1])
+
+# if arg passed in, use that, otherwise "inf"
+top = float('inf')
+if len(sys.argv) > 2:
+    top = float(sys.argv[2])
+
+count = 0
+
+for line in sys.stdin:
+    matches = re.search(r"^(\d+)\t(\d+)\t(\d+)\.(\d+)$", line.rstrip())
+
+    if matches:
+        (gap, chap, s, ms) = (int(matches.group(1)), int(matches.group(2)), int(matches.group(3)), int(matches.group(4)))
+
+        gap_s = float(gap) / 1000
+
+        if bottom <= gap_s and gap_s <= top:
+            count = count + 1
+
+            # m4b format
+            print("%02d:%02d:%02d.%03d Chapter %s (silence %s)" % (s//3600, (s//60) % 60, s % 60, ms//10, chap, gap))
+
+            # ogg/opus/mka format
+            # print("CHAPTER%03d=%02d:%02d:%02d.%03d" % (count, s//3600, (s//60) % 60, s % 60, ms//10))
+            # print("CHAPTER%03dNAME=Chapter %s (silence %s)" % (count, chap, gap))

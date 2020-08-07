@@ -27,7 +27,7 @@
 
 * be able to submit tracks from chapter list to cddb?
 
-* Convert silence2chaps and abtpickch to python
+* Convert abtpickch to python
 
 * Find alternative to python-cddb (or fix it).  Apparently you can't get track
   lengths from lookups.

@@ -1543,11 +1543,21 @@ class MutagenAudioBook(AudioBook):
             else:
                 print("Unexpected line from key/value: '{}'".format(line))
 
+    def _removeChapterTags(self):
+        """Remove all the chapter tags since they are about to get replaced"""
+        for key in self.mutagen_book.keys():
+            if key.startswith("chapter"):  # Not sure why this is lowercase?
+                del self.mutagen_book[key]
+
     def setChapters(self, chapter_txt):
 
         AudioBook.setChapters(self, chapter_txt)
 
         self._loadBook()
+
+        # Need to remove all chapter tags
+        # mainly so if the new chapter list has fewer chapters there's not leftovers
+        self._removeChapterTags()
 
         self._populateTagsFromFile(chapter_txt)
 

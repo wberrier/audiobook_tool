@@ -1538,8 +1538,10 @@ class MutagenAudioBook(AudioBook):
             if line.count('=') > 0:
                 (key, value) = line.split('=')
                 self.mutagen_book[key] = value
+            elif len(line) == 0:  # Ignore blank lines
+                pass
             else:
-                print("Unexpected line from key/value: " + line)
+                print("Unexpected line from key/value: '{}'".format(line))
 
     def setChapters(self, chapter_txt):
 

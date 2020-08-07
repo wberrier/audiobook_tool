@@ -2,18 +2,16 @@
 
 import re
 import sys
+import argparse
 
-# TODO: accept "format" as an argument for chapter format
-
-# if args passed in, use first argument, otherwise use 2
-bottom = 2.0
-if len(sys.argv) > 1:
-    bottom = float(sys.argv[1])
-
-# if arg passed in, use that, otherwise "inf"
-top = float('inf')
-if len(sys.argv) > 2:
-    top = float(sys.argv[2])
+parser = argparse.ArgumentParser()
+parser.add_argument("bottom", type=float, nargs='?', default=2.0,
+                    help="minimum gap size")
+parser.add_argument("top",    type=float, nargs='?', default=float('inf'),
+                    help="maximum gap size")
+parser.add_argument("--format", required=False, choices=['m4b', 'mka', 'ogg', 'opus'], default="m4b",
+                    help="Chapter format to use")
+args = parser.parse_args()
 
 count = 0
 
@@ -25,12 +23,13 @@ for line in sys.stdin:
 
         gap_s = float(gap) / 1000
 
-        if bottom <= gap_s and gap_s <= top:
+        if args.bottom <= gap_s and gap_s <= args.top:
             count = count + 1
 
-            # m4b format
-            print("%02d:%02d:%02d.%03d Chapter %s (silence %s)" % (s//3600, (s//60) % 60, s % 60, ms//10, chap, gap))
+            time_str = "%02d:%02d:%02d.%03d" % (s//3600, (s//60) % 60, s % 60, ms//10)
 
-            # ogg/opus/mka format
-            # print("CHAPTER%03d=%02d:%02d:%02d.%03d" % (count, s//3600, (s//60) % 60, s % 60, ms//10))
-            # print("CHAPTER%03dNAME=Chapter %s (silence %s)" % (count, chap, gap))
+            if args.format == "m4b":  # m4b format
+                print("%s Chapter %s (silence %s)" % (time_str, chap, gap))
+            else:  # ogg/opus/mka format
+                print("CHAPTER%03d=%s" % (count, time_str))
+                print("CHAPTER%03dNAME=Chapter %s (silence %s)" % (count, chap, gap))

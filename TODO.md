@@ -36,3 +36,6 @@
 
  This doesn't matter for having the actual cds, because we get lengths
  from the real ripped audio.
+
+* convert filenames and arguments to use hyphens instead of
+  underscores?  Would we rename the repo?

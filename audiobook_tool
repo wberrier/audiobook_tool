@@ -340,6 +340,32 @@ class ChapterList:
         for c in self.chapters:
             c.adjustTempo(tempo)
 
+    def resetIndicies(self):
+        """Mostly internal housekeeping method"""
+
+        # Reset chapter indexes (which internally are zero based)
+        count = 0
+        for chap in self.chapters:
+            chap.index = count
+            count = count + 1
+
+    def removeChapter(self, index):
+        """Remove a chapter.
+
+        This is trivial for m4b, but provide this for comment chapters, which is a pain to do by hand."""
+
+        internal_index = index - 1
+
+        # Chapters indicies are 1 based, this list is zero based
+        if internal_index < len(self.chapters):
+            self.chapters.pop(internal_index)
+        else:
+            print("Chapter list does not contain index: {}".format(index))
+            sys.exit(1)
+
+        # Since chapter was removed, reset these indicies (ugh)
+        self.resetIndicies()
+
     def toString(self):
         """Get Whole chapter listing in the subclass import/export format"""
         ret = ""
@@ -1118,6 +1144,19 @@ def setChapterTempo(chapter_format, chapter_txt, tempo):
     cl.toFile(chapter_txt)
 
 
+def removeChapter(chapter_format, chapter_txt, index):
+
+    exitIfMissing(chapter_txt)
+
+    cl = ChapterListFactory(chapter_format=chapter_format)
+
+    cl.populateFromChapterFile(chapter_txt)
+
+    cl.removeChapter(index)
+
+    cl.toFile(chapter_txt)
+
+
 class AudioBook:
     def __init__(self, audio_file):
         self.audio_file = audio_file
@@ -1810,6 +1849,7 @@ def usage():
   play_chapter        <AudioBook.chapters.txt> <AudioBook.book_ext> [chapter range [offset]]  (range e.g. "7" or "1-3,6,8-10")
   adjust_chapter      <AudioBook.chapters.txt> <chapter index> [--format=book_ext] [--cascade] <[-]seconds>
   set_chapter_tempo   <AudioBook.chapters.txt> <float ratio> [--format=book_ext]
+  remove_chapter      <AudioBook.chapters.txt> <chapter index> [--format=book_ext]
 
   set_chapters        <AudioBook.book_ext> <AudioBook.chapters.txt>
   get_chapters        <AudioBook.book_ext> <AudioBook.chapters.txt>
@@ -1982,6 +2022,24 @@ if __name__ == "__main__":
             sys.exit(1)
 
         setChapterTempo(chapter_format, chapter_txt, tempo)
+
+    elif 'remove_chapter' == subcommand:
+
+        chapter_format = "m4b"
+
+        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", ["format="])
+        for option, value in opts:
+            if option == "--format":
+                chapter_format = value
+
+        try:
+            (chapter_txt, index) = subcommand_args
+            index = int(index)
+        except Exception:
+            usage()
+            sys.exit(1)
+
+        removeChapter(chapter_format, chapter_txt, index)
 
     elif 'set_chapters' == subcommand:
         try:

@@ -69,8 +69,7 @@ metadata via ID3v2 tags, but this has not been a priority.
 
 #### Voice
 
-* m4b: all metadata supported (although chapter bug:
-  https://github.com/PaulWoitaschek/Voice/issues/690 )
+* m4b: all metadata supported
 
 * mka: no support for title nor cover art, unable to seek (see referenced
   issue above)
@@ -78,10 +77,6 @@ metadata via ID3v2 tags, but this has not been a priority.
 * opus: all metadata supported (currently preferred format)
 
 * ogg: all metadata supported
-
-NOTE: there's a bug where the title/author isn't shown in the book
-listing.  It seems to pick various metadata.  Need to file a bug
-upstream.  This happens for both opus and ogg containers.
 
 ### Data CD
 

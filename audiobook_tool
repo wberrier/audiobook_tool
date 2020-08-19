@@ -59,7 +59,7 @@ ffmpeg_output_profiles = {
     '.ogg':  {'codec': 'libvorbis',  'format': 'ogg',      'sample_rate': '22050', 'options': ''},
     '.opus': {'codec': 'libopus',    'format': 'opus',     'sample_rate': '24000', 'options': ''},
     # webm requires 24000 sample rate, and it looks like ffmpeg is requiring that of libopus in matroska format
-    '.mka':  {'codec': 'libopus',    'format': 'matroska', 'sample_rate': '24000', 'options': ''},
+    '.mka':  {'codec': 'libopus',    'format': 'matroska', 'sample_rate': '24000', 'options': '-dash 1'},
 }
 #
 ####################################################

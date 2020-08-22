@@ -456,6 +456,19 @@ class CommentFormatChapterList(ChapterList):
     def __init__(self):
         ChapterList.__init__(self)
 
+    @staticmethod
+    def _validateIndex(index_str, index, line):
+        """Make sure it's the index we're expecting"""
+
+        # Remove leading zeros
+        while len(index_str) > 0 and index_str[0] == '0':
+            index_str = index_str[1:]
+
+        if int(index_str) != index:
+            error = "Error: unexpected chapter index from line: " + line
+            print(error)
+            raise ChapterListFormatError(error)
+
     def populateFromChapterOutput(self, output):
         """Parse filename to populate the chapter info"""
 
@@ -470,19 +483,19 @@ class CommentFormatChapterList(ChapterList):
             if line == "":
                 continue
 
-            index_str = "%03d" % count
-
-            chapter_line_time_re = re.compile(r"CHAPTER%s=(\d\d):(\d\d):(\d\d).(\d\d\d)" % index_str)
-            chapter_line_name_re = re.compile(r"CHAPTER%sNAME=(.*)" % index_str)
+            chapter_line_time_re = re.compile(r"CHAPTER(\d+)=(\d\d):(\d\d):(\d\d).(\d\d\d)")
+            chapter_line_name_re = re.compile(r"CHAPTER(\d+)NAME=(.*)")
 
             if line_type == "time":
 
                 try:
-                    (hours, minutes, seconds, milliseconds) = chapter_line_time_re.search(line).groups()
+                    (index_str, hours, minutes, seconds, milliseconds) = chapter_line_time_re.search(line).groups()
                 except AttributeError:
                     error = "Error: unrecognizable chapter line: " + line
                     print(error)
                     raise ChapterListFormatError(error)
+
+                self._validateIndex(index_str, count, line)
 
                 total_seconds = totalSeconds(hours, minutes, seconds, milliseconds)
 
@@ -492,11 +505,13 @@ class CommentFormatChapterList(ChapterList):
             elif line_type == "name":
 
                 try:
-                    (chapter_name,) = chapter_line_name_re.search(line).groups()
+                    (index_str, chapter_name,) = chapter_line_name_re.search(line).groups()
                 except AttributeError:
                     error = "Error: unrecognizable chapter line: " + line
                     print(error)
                     raise ChapterListFormatError(error)
+
+                self._validateIndex(index_str, count, line)
 
                 # The chapter file uses one based, the object is zero based
                 self.addChapter(self.chapter_type(count-1, total_seconds, chapter_name))

@@ -26,23 +26,26 @@ coworker, the tool evolved to something useful for at least one other person.
 This other person (we may as well identify him: Joel) started adding cool
 features so I eventually posted the code to ease collaboration.
 
-## Formats
+## Containers / Codecs
 
 For Apple devices, m4b probably works the best.  Most Android players
 will also support m4b.
 
-For internet friendly (ie: no patents/royalties) codecs, mka, ogg, and
-opus are preferred.  I think mka (Matroska) is the best overall
-generic format, but it does not seem to be as popular for audiobooks.
-For example, seeking in audio only files can be problematic, see
-[here](https://github.com/PaulWoitaschek/Voice/issues/626).
+For internet friendly (ie: no patents/royalties) codecs and
+containers, mka, ogg, and opus are preferred.  I think mka (Matroska)
+is the best overall generic container, although it's not terribly
+popular for audiobooks (nor audio only for that matter).  Opus works
+really well for low bitrate speech.
+
+TODO: add support for webm?  In addition?  Or to replace .mka
+support...
 
 Now that the ogg container has a [formal extension for
 chapters](https://wiki.xiph.org/Chapter_Extension), opus and ogg work
 pretty well also.  But, the tooling for vorbis and opus don't seem to
 be interchangeable, even though they both use the ogg container (hence
 the preference for Matroska).  Opus is a more versatile codec than
-vorbis.
+vorbis in that it works well for low and high bitrates.
 
 mp3 support could probably be enhanced to support chapters and
 metadata via ID3v2 tags, but this has not been a priority.
@@ -55,7 +58,8 @@ metadata via ID3v2 tags, but this has not been a priority.
 
 * m4b: all metadata supported
 
-* mka: ?
+* mka: will only play if the filed is named with a ".webm" extension.
+  Coverart, chapters, and metadata do not work.
 
 * opus:
   * [x] title works
@@ -71,10 +75,9 @@ metadata via ID3v2 tags, but this has not been a priority.
 
 * m4b: all metadata supported
 
-* mka: no support for title nor cover art, unable to seek (see referenced
-  issue above)
+* mka: all metadata supported (my preferred container/codec)
 
-* opus: all metadata supported (currently preferred format)
+* opus: all metadata supported
 
 * ogg: all metadata supported
 

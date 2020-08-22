@@ -83,6 +83,7 @@ cmd_line_dependencies = {
     'eject': '',
     'wc': '',  # needed to compute input length
     'mkvpropedit': '',
+    'mkvmerge': '',
     'mkvextract': '',
     'mkvinfo': '',
 }
@@ -1344,13 +1345,11 @@ class MkaAudioBook(AudioBook):
         if trackTitle == "":
             trackTitle = title
 
-        # Set author and title (TODO: more info?)
-        #  Use double quotes so apostraphes can be used in titles
-        # TODO: no idea if this is valid for matroska
-        # NOTE: trackTitle not used on mka
+        # TODO: should be able to set a trackTitle for "track" tags
 
-        # Seems artist can only be set this xml file
+        # Seems artist can only be set via "tags"
         # Ugly, but oh well
+        # These are "global" tags
         tags_content = """
         <Tags>
           <Tag>
@@ -1371,7 +1370,16 @@ class MkaAudioBook(AudioBook):
         fd.write(tags_content)
         fd.close()
 
-        runOrDie("mkvpropedit %s --edit info --set title=%s --tags track:a1:%s" % (shellQuote(self.audio_file), shellQuote(title), shellQuote(xml_filename)))
+        temp_filename = self.audio_file + ".tmp"
+
+        #  Use double quotes so apostraphes can be used in titles
+        # NOTE: mkvpropedit accepts setting tags, but it seems to produce a file that makes metadata unrecognizable from players
+        # Not sure if that's a bug or what...
+        # Use mkvmerge instead to work around this (luckily it runs pretty quickly)
+        runOrDie("mkvmerge --title %s --no-video --global-tags %s --output %s %s --track-name 1:%s" % (shellQuote(title), shellQuote(xml_filename), shellQuote(temp_filename), shellQuote(self.audio_file), shellQuote(trackTitle)))
+
+        # Replace original file with new file
+        runOrDie("mv %s %s" % (shellQuote(temp_filename), shellQuote(self.audio_file)))
 
         # Clean up
         os.unlink(xml_filename)
@@ -1391,19 +1399,7 @@ class MkaAudioBook(AudioBook):
 
         AudioBook.postProcess(self)
 
-        # is there a way to do this from the command line without rewriting the whole file?
-        # This probably depends on using '-dash 1' during the encode, but I'm assuming the cues end up at the end of the file?
-        # That doesn't work for Android's exo player
-        # This creates an intermediate file, and mkclean isn't widely distributed, so just use ffmpeg method
-        # But, it does work
-        # runOrDie("mkclean --keep-cues %s" % (shellQuote(self.audio_file)))
-
-        # TODO: this removes a bunch of metadata, not sure it's the best option
-        # temp_file = "tmp." + self.audio_file
-        # runOrDie("ffmpeg -i %s -dash 1 -codec copy %s" % (shellQuote(self.audio_file), shellQuote(temp_file)))
-        # shutil.move(temp_file, self.audio_file)
-
-        print("postProcess: unsupported for mka")
+        print("postProcess: unnecessary for mka")
 
     def getMetaData(self):
 

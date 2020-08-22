@@ -37,9 +37,6 @@ is the best overall generic container, although it's not terribly
 popular for audiobooks (nor audio only for that matter).  Opus works
 really well for low bitrate speech.
 
-TODO: add support for webm?  In addition?  Or to replace .mka
-support...
-
 Now that the ogg container has a [formal extension for
 chapters](https://wiki.xiph.org/Chapter_Extension), opus and ogg work
 pretty well also.  But, the tooling for vorbis and opus don't seem to
@@ -58,8 +55,12 @@ metadata via ID3v2 tags, but this has not been a priority.
 
 * m4b: all metadata supported
 
-* mka: will only play if the filed is named with a ".webm" extension.
-  Coverart, chapters, and metadata do not work.
+* mka: does not show up in list
+
+* webm:
+  * [-] title
+  * [?] author
+  * [-] cover art
 
 * opus:
   * [x] title works
@@ -76,6 +77,8 @@ metadata via ID3v2 tags, but this has not been a priority.
 * m4b: all metadata supported
 
 * mka: all metadata supported (my preferred container/codec)
+
+* webm: all metadata supported
 
 * opus: all metadata supported
 

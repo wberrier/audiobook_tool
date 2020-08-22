@@ -58,8 +58,9 @@ ffmpeg_output_profiles = {
     '.m4b':  {'codec': 'aac',        'format': 'mp4',      'sample_rate': '22050', 'options': '-strict experimental -cutoff 15000'},
     '.ogg':  {'codec': 'libvorbis',  'format': 'ogg',      'sample_rate': '22050', 'options': ''},
     '.opus': {'codec': 'libopus',    'format': 'opus',     'sample_rate': '24000', 'options': ''},
-    # webm requires 24000 sample rate, and it looks like ffmpeg is requiring that of libopus in matroska format
     '.mka':  {'codec': 'libopus',    'format': 'matroska', 'sample_rate': '24000', 'options': '-dash 1'},
+    # webm requires 24000 sample rate, and it looks like ffmpeg is requiring that of libopus in matroska format
+    '.webm': {'codec': 'libopus',    'format': 'webm',     'sample_rate': '24000', 'options': '-dash 1'},
 }
 #
 ####################################################
@@ -614,7 +615,7 @@ def AudioBookFactory(filename):
     if book_format != "":
         if book_format == "m4b":
             return M4bAudioBook(filename)
-        elif book_format == "mka":
+        elif book_format == "mka" or book_format == "webm":
             return MkaAudioBook(filename)
         elif book_format == "ogg":
             return OggAudioBook(filename)
@@ -643,7 +644,7 @@ def ChapterListFactory(chapter_format="", filename=""):
     if chapter_format != "":
         if chapter_format == "m4b":
             return M4bChapterList()
-        elif chapter_format == "mka":
+        elif chapter_format == "mka" or chapter_format == "webm":
             return MkaChapterList()
         elif chapter_format == "ogg":
             return OggChapterList()
@@ -1385,7 +1386,10 @@ class MkaAudioBook(AudioBook):
         fd.write(tags_content)
         fd.close()
 
-        temp_filename = self.audio_file + ".tmp"
+        # Use the extension in the temp filename since mkvmerge bases some decisions on it (ie: webm)
+        extension = os.path.splitext(self.audio_file)[1]
+
+        temp_filename = self.audio_file + ".tmp" + extension
 
         #  Use double quotes so apostraphes can be used in titles
         # NOTE: mkvpropedit accepts setting tags, but it seems to produce a file that makes metadata unrecognizable from players
@@ -1875,8 +1879,8 @@ def usage():
   set_book_tempo      <AudioBook.book_ext> <Original.book_ext> [--ffmpeg_input_format_options="options"] <tempo float ratio>
   extract_tracks      <AudioBook.book_ext|ffmpeg recognizable audio file> <output dir> [--chapter_file=<AudioBook.chapters.txt>] [--chapter_format=<book_ext>]
 
-  Supported audio extensions (audio_ext): m4b, mka, ogg, opus, mp3
-  Supported book extensions (book_ext): m4b, mka, ogg, opus
+  Supported audio extensions (audio_ext): m4b, mka, opus, webm, ogg, mp3
+  Supported book extensions (book_ext): m4b, mka, opus, webm, ogg
   Supported cd backends (cd_backend): cdparanoia, icedax
 
 """

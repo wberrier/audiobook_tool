@@ -1653,7 +1653,7 @@ class MutagenAudioBook(AudioBook):
 
         AudioBook.postProcess(self)
 
-        print("postProcess: unsupported for " + self.chapter_format)
+        print("postProcess: unnecessary for " + self.chapter_format)
 
     def getMetaData(self):
 

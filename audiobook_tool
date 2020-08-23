@@ -1873,6 +1873,7 @@ def usage():
   set_chapters        <AudioBook.book_ext> <AudioBook.chapters.txt>
   get_chapters        <AudioBook.book_ext> <AudioBook.chapters.txt>
   set_metadata        <AudioBook.book_ext> <Author> <Title> [Track Title]
+  get_metadata        <AudioBook.book_ext>
   set_coverart        <AudioBook.book_ext> <coverart image>
   get_coverart        <AudioBook.book_ext>
   post_process        <AudioBook.book_ext>
@@ -2100,6 +2101,19 @@ if __name__ == "__main__":
         book = AudioBookFactory(audio_file)
 
         book.setMetaData(author, title, trackTitle)
+
+    elif 'get_metadata' == subcommand:
+        try:
+            (audio_file,) = subcommand_args
+        except Exception:
+            usage()
+            sys.exit(1)
+
+        book = AudioBookFactory(audio_file)
+
+        (author, title, trackTitle) = book.getMetaData()
+
+        print("Author: {}\nTitle: {}\nTrack Title: {}".format(author, title, trackTitle))
 
     elif 'set_coverart' == subcommand:
         try:

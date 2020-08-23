@@ -1361,11 +1361,11 @@ class MkaAudioBook(AudioBook):
         if trackTitle == "":
             trackTitle = title
 
-        # TODO: should be able to set a trackTitle for "track" tags
-
         # Seems artist can only be set via "tags"
         # Ugly, but oh well
         # These are "global" tags
+        # Reference: https://www.matroska.org/technical/tagging.html
+        # NOTE: tag keys "should" be all caps
         tags_content = """
         <Tags>
           <Tag>
@@ -1395,7 +1395,9 @@ class MkaAudioBook(AudioBook):
         # NOTE: mkvpropedit accepts setting tags, but it seems to produce a file that makes metadata unrecognizable from players
         # Not sure if that's a bug or what...
         # Use mkvmerge instead to work around this (luckily it runs pretty quickly)
-        runOrDie("mkvmerge --title %s --no-video --global-tags %s --output %s %s --track-name 1:%s" % (shellQuote(title), shellQuote(xml_filename), shellQuote(temp_filename), shellQuote(self.audio_file), shellQuote(trackTitle)))
+        # NOTE: "--track-name" needs to go before the input filename (and id starts at 0)
+        #  see: https://www.reddit.com/r/mkvtoolnix/comments/g8h8vm/mkvmerge_set_multiple_track_names/
+        runOrDie("mkvmerge --title %s --no-video --global-tags %s --output %s --track-name 0:%s %s" % (shellQuote(title), shellQuote(xml_filename), shellQuote(temp_filename), shellQuote(trackTitle), shellQuote(self.audio_file)))
 
         # Replace original file with new file
         runOrDie("mv %s %s" % (shellQuote(temp_filename), shellQuote(self.audio_file)))

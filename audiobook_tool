@@ -295,7 +295,11 @@ class ChapterList:
         return len(self.chapters)
 
     def addChapter(self, chapter):
-        self.chapters.append(chapter)
+
+        # Make sure the correct type of chapter is being constructed
+        # (useful for conversions)
+        # gotta be a smoother way to do this...
+        self.chapters.append(self.chapter_type(chapter.index, chapter.timeMark, chapter.name))
         self.currentTimeMark = chapter.timeMark
 
     def addChapterFromFile(self, filename, tempo="1.0"):
@@ -956,6 +960,18 @@ def genChapterList(files, chapter_format, out_file="", tempo="1.0"):
         cl.toFile(out_file)
 
     return cl
+
+
+def convertChapterList(chapter_file, chapter_format, new_chapter_file, new_chapter_format):
+    cl = ChapterListFactory(chapter_format=chapter_format)
+    cl.populateFromChapterFile(chapter_file)
+
+    new_cl = ChapterListFactory(chapter_format=new_chapter_format)
+
+    for i in range(1, cl.size() + 1):
+        new_cl.addChapter(cl.getChapter(i))
+
+    new_cl.toFile(new_chapter_file)
 
 
 def buildFilesString(files):
@@ -1865,6 +1881,7 @@ def usage():
   reencode            <output dir> <output audio_ext> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo=<float ratio>]
 
   gen_chapter_list    <AudioBook.chapters.txt> <audio files> [--tempo=<float ratio>] [--format=book_ext]
+  convert_chapter_list <AudioBook.chapters.txt> --format=book_ext <New.AudioBook.chapters.txt> --new_format=book_ext
   play_chapter        <AudioBook.chapters.txt> <AudioBook.book_ext> [chapter range [offset]]  (range e.g. "7" or "1-3,6,8-10")
   adjust_chapter      <AudioBook.chapters.txt> <chapter index> [--format=book_ext] [--cascade] <[-]seconds>
   set_chapter_tempo   <AudioBook.chapters.txt> <float ratio> [--format=book_ext]
@@ -1975,6 +1992,27 @@ if __name__ == "__main__":
             sys.exit(1)
 
         genChapterList(files, chapter_format, out_file, tempo)
+
+    elif 'convert_chapter_list' == subcommand:
+        # Parse the options
+        # Set some defaults
+        chapter_format = "m4b"
+        new_chapter_format = "m4b"
+        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", ["format=", "new_format="])
+        for option, value in opts:
+            if option == "--format":
+                chapter_format = value
+            if option == "--new_format":
+                new_chapter_format = value
+
+        try:
+            (chapter_file, new_chapter_file) = subcommand_args
+
+        except Exception:
+            usage()
+            sys.exit(1)
+
+        convertChapterList(chapter_file, chapter_format, new_chapter_file, new_chapter_format)
 
     elif 'play_chapter' == subcommand:
 

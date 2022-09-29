@@ -1687,12 +1687,19 @@ class MutagenAudioBook(AudioBook):
 
         self._loadBook()
 
-        if 'ARTIST' in self.mutagen_book:
-            author = self.mutagen_book['ARTIST']
-        if 'ALBUM' in self.mutagen_book:
-            title = self.mutagen_book['ALBUM']
-        if 'TITLE' in self.mutagen_book:
-            trackTitle = self.mutagen_book['TITLE']
+
+        try:
+            if 'ARTIST' in self.mutagen_book:
+                author = self.mutagen_book['ARTIST'][0]
+            if 'ALBUM' in self.mutagen_book:
+                title = self.mutagen_book['ALBUM'][0]
+            if 'TITLE' in self.mutagen_book:
+                trackTitle = self.mutagen_book['TITLE'][0]
+        except IndexError as e:
+            print("Programming error getting metadata from: {}: {}".format(self.audio_file, e));
+            sys.exit(1)
+        except Exception as e:
+            raise e
 
         if author and title:
             return (author, title, trackTitle)

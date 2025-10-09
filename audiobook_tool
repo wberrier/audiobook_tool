@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-# TODO add a file docstring to use in "usage"
-
 # Author: Wade Berrier  <wberrier@gmail.com>
 
 # License: GPLv2
@@ -14,7 +12,7 @@ import os
 import re
 import time
 import shutil
-import getopt
+import argparse
 import glob
 import subprocess
 import base64
@@ -31,7 +29,7 @@ except Exception:
     have_tagpy = False
 
 # TODO: what's the python convention for setting this
-AUDIOBOOK_VERSION = "1.2"
+AUDIOBOOK_VERSION = "1.3"
 AUDIOBOOK_CONTACT = "wberrier@gmail.com"
 
 ####################################################
@@ -64,6 +62,9 @@ ffmpeg_output_profiles = {
 }
 #
 ####################################################
+
+audio_extensions = ['m4b', 'mka', 'opus', 'webm', 'ogg', 'mp3']
+book_extensions = ['m4b', 'mka', 'opus', 'webm', 'ogg']
 
 ####################################################
 # external programs this program depends on
@@ -981,34 +982,6 @@ def buildFilesString(files):
     return ret
 
 
-def getRipCdOptions(args):
-    cd_device = None
-    ignore_errors = False
-    cd_backend = "cdparanoia"
-    opts, remaining_args = getopt.gnu_getopt(args, "", ["cd_device=", "ignore_errors", "cd_backend="])
-    for option, value in opts:
-        if option == "--cd_device":
-            cd_device = value
-        elif option == "--ignore_errors":
-            ignore_errors = True
-        elif option == "--cd_backend":
-            cd_backend = value
-    args = remaining_args
-    return (cd_device, ignore_errors, cd_backend, args)
-
-
-def getEncodeOptions(args):
-    ffmpeg_input_format_options = ""
-    tempo = "1.0"
-    opts, remaining_args = getopt.gnu_getopt(args, "", ["ffmpeg_input_format_options=", "tempo="])
-    for option, value in opts:
-        if option == "--ffmpeg_input_format_options":
-            ffmpeg_input_format_options = value
-        if option == "--tempo":
-            tempo = value
-    return (ffmpeg_input_format_options, tempo, remaining_args)
-
-
 # Combines a bunch of audio files to a single mp3, m4b, or ogg audiobook
 #  Supports any audio files supported by ffmpeg
 #  Do this in one pass to avoid a path using intermediate files going to wav, raw, and then output
@@ -1877,376 +1850,225 @@ def validateDependencies(progs):
             print("Warning: %s not found" % p)
 
 
-def usage():
-    usage_text = """
-./audiobook_tool <sub command> <sub command arguments>
-
- Sub commands:
-
-  rip_cds             <output dir> [--cd_device="device"] [ --ignore_errors ] [ --backend=cd_backend ] [ <disc number> <num_previous_tracks> ]
-  combine_and_encode  <AudioBook.audio_ext> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo=<float ratio>]
-  reencode            <output dir> <output audio_ext> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo=<float ratio>]
-
-  gen_chapter_list    <AudioBook.chapters.txt> <audio files> [--tempo=<float ratio>] [--format=book_ext]
-  convert_chapter_list <AudioBook.chapters.txt> --format=book_ext <New.AudioBook.chapters.txt> --new_format=book_ext
-  play_chapter        <AudioBook.chapters.txt> <AudioBook.book_ext> [chapter range [offset]]  (range e.g. "7" or "1-3,6,8-10")
-  adjust_chapter      <AudioBook.chapters.txt> <chapter index> [--format=book_ext] [--cascade] <[-]seconds>
-  set_chapter_tempo   <AudioBook.chapters.txt> <float ratio> [--format=book_ext]
-  remove_chapter      <AudioBook.chapters.txt> <chapter index> [--format=book_ext]
-
-  set_chapters        <AudioBook.book_ext> <AudioBook.chapters.txt>
-  get_chapters        <AudioBook.book_ext> <AudioBook.chapters.txt>
-  set_metadata        <AudioBook.book_ext> <Author> <Title> [Track Title]
-  get_metadata        <AudioBook.book_ext>
-  set_coverart        <AudioBook.book_ext> <coverart image>
-  get_coverart        <AudioBook.book_ext>
-  post_process        <AudioBook.book_ext>
-
-  book_from_files     <AudioBook.book_ext> <Author> <Title> <coverart image> <ffmpeg recognizable audio files> [--ffmpeg_input_format_options="options"] [--tempo=<float ratio>]
-  set_book_tempo      <AudioBook.book_ext> <Original.book_ext> [--ffmpeg_input_format_options="options"] <tempo float ratio>
-  extract_tracks      <AudioBook.book_ext|ffmpeg recognizable audio file> <output dir> [--chapter_file=<AudioBook.chapters.txt>] [--chapter_format=<book_ext>]
-
-  Supported audio extensions (audio_ext): m4b, mka, opus, webm, ogg, mp3
-  Supported book extensions (book_ext): m4b, mka, opus, webm, ogg
-  Supported cd backends (cd_backend): cdparanoia, icedax
-
-"""
-    print(usage_text)
-
-
 if __name__ == "__main__":
 
     # Check for command line dependencies (only warn user)
     validateDependencies(list(cmd_line_dependencies.keys()))
 
-    try:
-        subcommand = sys.argv[1]
-        subcommand_args = sys.argv[2:]
-    except Exception:
-        usage()
-        sys.exit(1)
+    parser = argparse.ArgumentParser(prog='audiobook_tool')
+    subparsers = parser.add_subparsers(dest='subcommand')
+
+    # --- rip_cds ---
+    parser_rip_cds = subparsers.add_parser("rip_cds", help="Rip CDs into audio files.")
+    parser_rip_cds.add_argument("output", help="Directory to store ripped tracks.")
+    parser_rip_cds.add_argument("--cd_device", help="CD device to use.")
+    parser_rip_cds.add_argument("--ignore_errors", action="store_true", help="Ignore read errors.")
+    parser_rip_cds.add_argument("--backend", choices=["cdparanoia", "icedax"], default="cdparanoia", help="CD backend to use.")
+    parser_rip_cds.add_argument("disc_number", nargs="?", type=int, default=1, help="Disc number (optional).")
+    parser_rip_cds.add_argument("num_previous_tracks", nargs="?", type=int, default=0, help="Number of previous tracks (optional).")
+
+    # --- combine_and_encode ---
+    cae = subparsers.add_parser("combine_and_encode", help="Combine and encode audio files.")
+    cae.add_argument("audio_file", help="Output audiobook file (e.g. Book.m4b).")
+    cae.add_argument("in_files", nargs="+", help="Input audio files.")
+    cae.add_argument("--ffmpeg_input_format_options", help="FFmpeg input format options.")
+    cae.add_argument("--tempo", type=float, default="1.0", help="Playback tempo ratio (e.g. 1.1 for 10%% faster).")
+
+    # --- reencode ---
+    reenc = subparsers.add_parser("reencode", help="Reencode audio files.")
+    reenc.add_argument("output_dir", help="Output directory.")
+    reenc.add_argument("audio_ext", choices=audio_extensions, help="Output audio format.")
+    reenc.add_argument("in_files", nargs="+", help="Input audio files.")
+    reenc.add_argument("--ffmpeg_input_format_options", help="FFmpeg input format options.")
+    reenc.add_argument("--tempo", type=float, default="1.0", help="Playback tempo ratio.")
+
+    # --- gen_chapter_list ---
+    gcl = subparsers.add_parser("gen_chapter_list", help="Generate a chapter list from audio files.")
+    gcl.add_argument("chapter_file", help="Output chapter list file (e.g. Book.chapters.txt).")
+    gcl.add_argument("in_files", nargs="+", help="Input audio files.")
+    gcl.add_argument("--tempo", type=float, default="1.0", help="Playback tempo ratio.")
+    gcl.add_argument("--format", choices=book_extensions, default="m4b", help="Output format extension.")
+
+    # --- convert_chapter_list ---
+    ccl = subparsers.add_parser("convert_chapter_list", help="Convert chapter list formats.")
+    ccl.add_argument("chapter_file", help="Input chapter list.")
+    ccl.add_argument("--format", required=True, choices=book_extensions, default="m4b", help="Input format.")
+    ccl.add_argument("new_chapter_file", help="Output chapter list.")
+    ccl.add_argument("--new_format", required=True, choices=book_extensions, default="m4b", help="Output format.")
+
+    # --- play_chapter ---
+    play = subparsers.add_parser("play_chapter", help="Play a specific chapter range from an audiobook.")
+    play.add_argument("chapter_file", help="Chapter list file.")
+    play.add_argument("book_file", help="Audiobook file.")
+    play.add_argument("chapter_range", nargs="?", help='Chapter range (e.g. "7" or "1-3,6,8-10").')
+    play.add_argument("offset", nargs="?", type=float, default=0.0, help="Start offset in seconds.")
+
+    # --- adjust_chapter ---
+    adj = subparsers.add_parser("adjust_chapter", help="Adjust chapter timing.")
+    adj.add_argument("chapter_file", help="Chapter list file.")
+    adj.add_argument("chapter_index", type=int, help="Chapter index to adjust.")
+    adj.add_argument("--format", choices=book_extensions, default="m4b", help="Book format.")
+    adj.add_argument("--cascade", action="store_true", help="Cascade timing adjustment to following chapters.")
+    adj.add_argument("seconds", type=float, help="Seconds to shift (can be negative, e.g. -2.5).")
+
+    # --- set_chapter_tempo ---
+    sct = subparsers.add_parser("set_chapter_tempo", help="Set playback tempo for a chapter list.")
+    sct.add_argument("chapter_file", help="Chapter list file.")
+    sct.add_argument("tempo", type=float, help="Tempo ratio.")
+    sct.add_argument("--format", choices=book_extensions, default="m4b", help="Book format.")
+
+    # --- remove_chapter ---
+    rc = subparsers.add_parser("remove_chapter", help="Remove a chapter from a list.")
+    rc.add_argument("chapter_file", help="Chapter list file.")
+    rc.add_argument("chapter_index", type=int, help="Chapter index to remove.")
+    rc.add_argument("--format", choices=book_extensions, default="m4b", help="Book format.")
+
+    # --- set_chapters ---
+    setc = subparsers.add_parser("set_chapters", help="Set chapters into audiobook.")
+    setc.add_argument("book_file", help="Audiobook file.")
+    setc.add_argument("chapter_file", help="Chapter list file.")
+
+    # --- get_chapters ---
+    getc = subparsers.add_parser("get_chapters", help="Extract chapters from audiobook.")
+    getc.add_argument("book_file", help="Audiobook file.")
+    getc.add_argument("chapter_file", help="Output chapter list file.")
+
+    # --- set_metadata ---
+    smd = subparsers.add_parser("set_metadata", help="Set metadata for audiobook.")
+    smd.add_argument("book_file", help="Audiobook file.")
+    smd.add_argument("author", help="Author name.")
+    smd.add_argument("title", help="Book title.")
+    smd.add_argument("track_title", nargs="?", help="Track title (optional).")
+
+    # --- get_metadata ---
+    gmd = subparsers.add_parser("get_metadata", help="Get metadata from audiobook.")
+    gmd.add_argument("book_file", help="Audiobook file.")
+
+    # --- set_coverart ---
+    sca = subparsers.add_parser("set_coverart", help="Set cover art for audiobook.")
+    sca.add_argument("book_file", help="Audiobook file.")
+    sca.add_argument("image_file", help="Cover image file.")
+
+    # --- get_coverart ---
+    gca = subparsers.add_parser("get_coverart", help="Get cover art from audiobook.")
+    gca.add_argument("book_file", help="Audiobook file.")
+
+    # --- post_process ---
+    pp = subparsers.add_parser("post_process", help="Run post-processing on audiobook.")
+    pp.add_argument("book_file", help="Audiobook file.")
+
+    # --- book_from_files ---
+    bff = subparsers.add_parser("book_from_files", help="Build audiobook from files.")
+    bff.add_argument("book_file", help="Output audiobook file.")
+    bff.add_argument("author", help="Author name.")
+    bff.add_argument("title", help="Book title.")
+    bff.add_argument("image_file", help="Cover art image.")
+    bff.add_argument("in_files", nargs="+", help="Input audio files.")
+    bff.add_argument("--ffmpeg_input_format_options", help="FFmpeg input format options.")
+    bff.add_argument("--tempo", type=float, default="1.0", help="Playback tempo ratio.")
+
+    # --- set_book_tempo ---
+    sbt = subparsers.add_parser("set_book_tempo", help="Create new audiobook with adjusted tempo.")
+    sbt.add_argument("book_file", help="Output audiobook file.")
+    sbt.add_argument("in_book_file", help="Original audiobook file.")
+    sbt.add_argument("--ffmpeg_input_format_options", help="FFmpeg input format options.")
+    sbt.add_argument("tempo", type=float, help="Tempo ratio.")
+
+    # --- extract_tracks ---
+    et = subparsers.add_parser("extract_tracks", help="Extract tracks from audiobook or audio file.")
+    et.add_argument("audio_file", help="Audiobook or audio file.")
+    et.add_argument("output_dir", help="Directory for extracted tracks.")
+    et.add_argument("--chapter_file", help="Chapter list file.")
+    et.add_argument("--chapter_format", choices=book_extensions, help="Chapter format.")
+
+
+    args = parser.parse_args()
+
+    # TODO: eventually we could use the python match statement
 
     # Parse and handle each of the sub-commands
-    #  TODO: more elegant way to parse all of this?
-    if 'rip_cds' == subcommand:
-        (cd_device, ignore_errors, cd_backend, subcommand_args) = getRipCdOptions(subcommand_args)
-        disc_num = "1"
-        num_previous_tracks = "0"
-        try:
-            if len(subcommand_args) > 1:
-                (output, disc_num, num_previous_tracks) = subcommand_args
-            else:
-                output = subcommand_args[0]
-        except Exception:
-            usage()
+    if 'rip_cds' == args.subcommand:
+
+        # do some argument validation, since not sure if argparse can support dependant optional positional args
+        if args.disc_number != 1 and args.num_previous_tracks == 0:
+            print("Must set num_previous_tracks when resuming with disc_number")
+            parser.print_help()
             sys.exit(1)
 
-        interactivelyRipCds(output, cd_device, ignore_errors, cd_backend, int(disc_num), int(num_previous_tracks))
+        interactivelyRipCds(args.output, args.cd_device, args.ignore_errors, args.backend, args.disc_number, args.num_previous_tracks)
 
-    elif 'combine_and_encode' == subcommand:
-        (ffmpeg_input_format_options, tempo, subcommand_args) = getEncodeOptions(subcommand_args)
+    elif 'combine_and_encode' == args.subcommand:
+        combineAndEncode(args.audio_file, args.in_files, args.ffmpeg_input_format_options, args.tempo)
 
-        try:
-            output = subcommand_args[0]
-            in_files = subcommand_args[1:]
+    elif 'reencode' == args.subcommand:
+        reEncode(args.output_dir, "." + args.audio_ext, args.in_files, args.ffmpeg_input_format_options, args.tempo)
 
-            if len(in_files) < 1:
-                raise
-        except Exception:
-            usage()
+    elif 'gen_chapter_list' == args.subcommand:
+        genChapterList(args.in_files, args.format, args.chapter_file, args.tempo)
+
+    elif 'convert_chapter_list' == args.subcommand:
+        convertChapterList(args.chapter_file, args.format, args.new_chapter_file, args.new_format)
+
+    elif 'play_chapter' == args.subcommand:
+        if not re.search(r"^\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$", args.chapter_range):
+            parser.print_help()
             sys.exit(1)
 
-        combineAndEncode(output, in_files, ffmpeg_input_format_options, tempo)
+        playChapterSample(args.chapter_file, args.book_file, args.chapter_range, args.offset)
 
-    elif 'reencode' == subcommand:
-        (ffmpeg_input_format_options, tempo, subcommand_args) = getEncodeOptions(subcommand_args)
+    elif 'adjust_chapter' == args.subcommand:
+        adjustChapter(args.format, args.chapter_file, args.chapter_index, args.seconds, args.cascade)
 
-        try:
-            output = subcommand_args[0]
-            # bridge command line interface with code interface with the dot
-            audio_ext = "." + subcommand_args[1]
-            in_files = subcommand_args[2:]
+    elif 'set_chapter_tempo' == args.subcommand:
+        setChapterTempo(args.format, args.chapter_file, args.tempo)
 
-            if len(in_files) < 1:
-                raise
-        except Exception:
-            usage()
-            sys.exit(1)
+    elif 'remove_chapter' == args.subcommand:
+        removeChapter(args.format, args.hapter_file, args.chapter_index)
 
-        reEncode(output, audio_ext, in_files, ffmpeg_input_format_options, tempo)
+    elif 'set_chapters' == args.subcommand:
+        book = AudioBookFactory(args.book_file)
+        book.setChapters(args.chapter_file)
 
-    elif 'gen_chapter_list' == subcommand:
-        # Parse the options
-        # Set some defaults
-        tempo = "1.0"
-        chapter_format = "m4b"
-        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", ["tempo=", "format="])
-        for option, value in opts:
-            if option == "--tempo":
-                tempo = value
-            if option == "--format":
-                chapter_format = value
-
-        try:
-            out_file = subcommand_args[0]
-            files = subcommand_args[1:]
-
-            if len(files) < 1:
-                raise
-
-        except Exception:
-            usage()
-            sys.exit(1)
-
-        genChapterList(files, chapter_format, out_file, tempo)
-
-    elif 'convert_chapter_list' == subcommand:
-        # Parse the options
-        # Set some defaults
-        chapter_format = "m4b"
-        new_chapter_format = "m4b"
-        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", ["format=", "new_format="])
-        for option, value in opts:
-            if option == "--format":
-                chapter_format = value
-            if option == "--new_format":
-                new_chapter_format = value
-
-        try:
-            (chapter_file, new_chapter_file) = subcommand_args
-
-        except Exception:
-            usage()
-            sys.exit(1)
-
-        convertChapterList(chapter_file, chapter_format, new_chapter_file, new_chapter_format)
-
-    elif 'play_chapter' == subcommand:
-
-        # Get optional offset
-        offset = 0.0
-        if len(subcommand_args) == 4:
-            offset = float(subcommand_args[3])
-            subcommand_args.pop()
-
-        # Get optional chapter_index
-        offset = 0.0
-        if len(subcommand_args) == 3:
-            chapter_index = subcommand_args[2]
-            if not re.search(r"^\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$", chapter_index):
-                usage()
-                sys.exit(1)
-            subcommand_args.pop()
-        else:
-            chapter_index = None
-
-        try:
-            (chapter_txt, audio_file) = subcommand_args
-        except Exception:
-            usage()
-            sys.exit(1)
-
-        playChapterSample(chapter_txt, audio_file, chapter_index, offset)
-
-    elif 'adjust_chapter' == subcommand:
-
-        cascade = False
-        chapter_format = "m4b"
-
-        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", ["cascade", "format="])
-        for option, value in opts:
-            if option == "--cascade":
-                cascade = True
-            if option == "--format":
-                chapter_format = value
-
-        try:
-            (chapter_txt, chapter_index_str, seconds_str) = subcommand_args
-            chapter_index = int(chapter_index_str)
-            seconds = float(seconds_str)
-        except Exception:
-            usage()
-            sys.exit(1)
-
-        adjustChapter(chapter_format, chapter_txt, chapter_index, seconds, cascade)
-
-    elif 'set_chapter_tempo' == subcommand:
-
-        chapter_format = "m4b"
-
-        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", ["format="])
-        for option, value in opts:
-            if option == "--format":
-                chapter_format = value
-
-        try:
-            (chapter_txt, tempo) = subcommand_args
-            tempo = float(tempo)
-        except Exception:
-            usage()
-            sys.exit(1)
-
-        setChapterTempo(chapter_format, chapter_txt, tempo)
-
-    elif 'remove_chapter' == subcommand:
-
-        chapter_format = "m4b"
-
-        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", ["format="])
-        for option, value in opts:
-            if option == "--format":
-                chapter_format = value
-
-        try:
-            (chapter_txt, index) = subcommand_args
-            index = int(index)
-        except Exception:
-            usage()
-            sys.exit(1)
-
-        removeChapter(chapter_format, chapter_txt, index)
-
-    elif 'set_chapters' == subcommand:
-        try:
-            (audio_file, chapter_txt) = subcommand_args
-        except Exception:
-            usage()
-            sys.exit(1)
-
-        book = AudioBookFactory(audio_file)
-
-        book.setChapters(chapter_txt)
-
-    elif 'get_chapters' == subcommand:
-        try:
-            (audio_file, chapter_txt) = subcommand_args
-        except Exception:
-            usage()
-            sys.exit(1)
-
-        book = AudioBookFactory(audio_file)
-
+    elif 'get_chapters' == args.subcommand:
+        book = AudioBookFactory(args.book_file)
         cl = book.getChapters()
+        cl.toFile(args.chapter_file)
 
-        cl.toFile(chapter_txt)
+    elif 'set_metadata' == args.subcommand:
+        book = AudioBookFactory(args.book_file)
+        book.setMetaData(args.author, args.title, args.track_title)
 
-    elif 'set_metadata' == subcommand:
-        # Get optional offset
-        trackTitle = ""
-        if len(subcommand_args) == 4:
-            trackTitle = subcommand_args[3]
-            subcommand_args.pop()
-
-        try:
-            (audio_file, author, title) = subcommand_args
-        except Exception:
-            usage()
-            sys.exit(1)
-
-        book = AudioBookFactory(audio_file)
-
-        book.setMetaData(author, title, trackTitle)
-
-    elif 'get_metadata' == subcommand:
-        try:
-            (audio_file,) = subcommand_args
-        except Exception:
-            usage()
-            sys.exit(1)
-
-        book = AudioBookFactory(audio_file)
+    elif 'get_metadata' == args.subcommand:
+        book = AudioBookFactory(args.book_file)
 
         (author, title, trackTitle) = book.getMetaData()
 
         print("Author: {}\nTitle: {}\nTrack Title: {}".format(author, title, trackTitle))
 
-    elif 'set_coverart' == subcommand:
-        try:
-            (audio_file, image_file) = subcommand_args
-        except Exception:
-            usage()
-            sys.exit(1)
+    elif 'set_coverart' == args.subcommand:
+        book = AudioBookFactory(args.book_file)
+        book.setCoverArt(args.image_file)
 
-        book = AudioBookFactory(audio_file)
-
-        book.setCoverArt(image_file)
-
-    elif 'get_coverart' == subcommand:
-        try:
-            (audio_file,) = subcommand_args
-        except Exception:
-            usage()
-            sys.exit(1)
-
-        book = AudioBookFactory(audio_file)
-
+    elif 'get_coverart' == args.subcommand:
+        book = AudioBookFactory(args.book_file)
         book.getCoverArt()
 
-    elif 'post_process' == subcommand:
-        try:
-            (audio_file,) = subcommand_args
-        except Exception:
-            usage()
-            sys.exit(1)
-
-        book = AudioBookFactory(audio_file)
-
+    elif 'post_process' == args.subcommand:
+        book = AudioBookFactory(args.book_file)
         book.postProcess()
 
-    elif 'book_from_files' == subcommand:
-        (ffmpeg_input_format_options, tempo, subcommand_args) = getEncodeOptions(subcommand_args)
+    elif 'book_from_files' == args.subcommand:
+        book = AudioBookFactory(args.book_file)
+        book.fromFiles(args.author, args.title, args.image_file, args.in_files, args.ffmpeg_input_format_options, args.tempo)
 
-        try:
-            audio_file = subcommand_args[0]
-            author = subcommand_args[1]
-            title = subcommand_args[2]
-            art_file = subcommand_args[3]
-            in_files = subcommand_args[4:]
-        except Exception:
-            usage()
-            sys.exit(1)
+    elif 'set_book_tempo' == args.subcommand:
+        setTempo(args.book_file, args.in_book_file, args.ffmpeg_input_format_options, args.tempo)
 
-        book = AudioBookFactory(audio_file)
-
-        book.fromFiles(author, title, art_file, in_files, ffmpeg_input_format_options, tempo)
-
-    elif 'set_book_tempo' == subcommand:
-
-        # Parse the options
-        ffmpeg_input_format_options = ""
-        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", ["ffmpeg_input_format_options="])
-        for option, value in opts:
-            if option == "--ffmpeg_input_format_options":
-                ffmpeg_input_format_options = value
-
-        try:
-            (audio_file, in_file, tempo) = subcommand_args
-        except Exception:
-            usage()
-            sys.exit(1)
-
-        setTempo(audio_file, in_file, ffmpeg_input_format_options, tempo)
-
-    elif 'extract_tracks' == subcommand:
-        chapter_file = ""
-        chapter_format = ""
-        opts, subcommand_args = getopt.gnu_getopt(subcommand_args, "", ["chapter_file=", "chapter_format="])
-        for option, value in opts:
-            if option == "--chapter_file":
-                chapter_file = value
-            elif option == "--chapter_format":
-                chapter_format = value
-
-        try:
-            (audio_file, output_dir) = subcommand_args
-        except Exception:
-            usage()
-            sys.exit(1)
-
-        extractTracks(audio_file, chapter_format, chapter_file, output_dir)
+    elif 'extract_tracks' == args.subcommand:
+        extractTracks(args.audio_file, args.chapter_format, args.chapter_file, args.output_dir)
 
     else:
-        usage()
+        parser.print_help()
         sys.exit(1)
 
     sys.exit(0)

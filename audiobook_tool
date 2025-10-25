@@ -122,7 +122,7 @@ class ChapterListFormatError(Exception):
         return repr(self.value)
 
 
-def lengthInSecondsFFmpeg(file,  ffmpeg_output_profile, tempo="1.0"):
+def lengthInSecondsFFmpeg(file,  ffmpeg_output_profile, tempo=1.0):
     """Decode input using ffmpeg to determine the length of the input
 
     Optionally takes a tempo arg, in which the file is first run through a sox pipe
@@ -135,7 +135,7 @@ def lengthInSecondsFFmpeg(file,  ffmpeg_output_profile, tempo="1.0"):
     ffmpeg_decode_cmd = "%s %s -y -i %s -acodec pcm_s16le -f s16le -ar %s -ac %s - %s" % (ffmpeg_program, ffmpeg_verbosity, shellQuote(file), output_rate, output_channels, null_pipe)
     # Run through a sox pipe if we want to change the tempo
     #  Note: have sox write out to stdout, and count with wc.  Should be accurate, as ffmpeg is doing the decoding
-    if tempo != "1.0":
+    if tempo != 1.0:
         sox_cmd = "sox -L -t s2 -r %s -c %s - -t s2 -r %s -c %s - tempo %s 30" % (output_rate, output_channels, output_rate, output_channels, tempo)
         command = "%s | %s 2>/dev/null | %s" % (ffmpeg_decode_cmd, sox_cmd, wc_cmd)
 
@@ -168,7 +168,7 @@ soxi_sample_rate_re = re.compile(r"Sample Rate\s+: (\d+)")
 soxi_duration_re = re.compile(r"Duration\s+: \d\d:\d\d:\d\d\.\d\d = (\d+) samples")
 
 
-def lengthInSecondsSoxi(file, ffmpeg_output_profile, tempo="1.0"):
+def lengthInSecondsSoxi(file, ffmpeg_output_profile, tempo=1.0):
     """
     Use soxi to determine wave file lengths, and ffmpeg decoding for all others.
 
@@ -177,7 +177,7 @@ def lengthInSecondsSoxi(file, ffmpeg_output_profile, tempo="1.0"):
     """
 
     decodeRequired = False
-    if os.path.splitext(file)[1] != ".wav" or tempo != "1.0":
+    if os.path.splitext(file)[1] != ".wav" or tempo != 1.0:
         decodeRequired = True
 
     if decodeRequired:
@@ -234,7 +234,7 @@ class Chapter:
 
     def adjustTempo(self, tempo):
         """Compute new chapter mark based on new tempo"""
-        self.timeMark /= float(tempo)
+        self.timeMark /= tempo
 
     def timeString(self):
         """This happens to match the format for both m4b and mka.  Can split out and duplicate if necessary"""
@@ -303,7 +303,7 @@ class ChapterList:
         self.chapters.append(self.chapter_type(chapter.index, chapter.timeMark, chapter.name))
         self.currentTimeMark = chapter.timeMark
 
-    def addChapterFromFile(self, filename, tempo="1.0"):
+    def addChapterFromFile(self, filename, tempo=1.0):
 
         # Try to get the name of the chapter from the title
         # TODO: also support mp4 files via mp4v2
@@ -946,7 +946,7 @@ def interactivelyRipCds(output, cd_device, ignore_errors, cd_backend, disc_count
 
 # Format: 00:00:00.000 Chapter 1
 # TODO: break up chapter lists for resulting m4b files over the sample limit
-def genChapterList(files, chapter_format, out_file="", tempo="1.0"):
+def genChapterList(files, chapter_format, out_file="", tempo=1.0):
 
     # sort the files, just in case
     files.sort()
@@ -1018,7 +1018,7 @@ def encodeFiles(output, output_extension, in_files, ffmpeg_input_options, tempo)
 
     # Set up sox pipe for tempo option
     sox_pipe = ""
-    if tempo != "1.0":
+    if tempo != 1.0:
         # tempo segment of 30 (recommended for speech)
         sox_pipe = "| sox -L -t s2 -r %s -c %s - -L -t s2 -r %s -c %s - tempo %s 30" % (output_rate, output_channels, output_rate, output_channels, tempo)
 
@@ -1057,7 +1057,7 @@ def encodeFiles(output, output_extension, in_files, ffmpeg_input_options, tempo)
     print("Success!")
 
 
-def combineAndEncode(output, in_files, ffmpeg_input_options="", tempo="1.0"):
+def combineAndEncode(output, in_files, ffmpeg_input_options="", tempo=1.0):
     # Get output file extension
     output_extension = os.path.splitext(output)[1]
 
@@ -1189,7 +1189,7 @@ class AudioBook:
     def postProcess(self):
         exitIfMissing(self.audio_file)
 
-    def fromFiles(self, author, title, art_file, in_files, ffmpeg_input_format_options="", tempo="1.0"):
+    def fromFiles(self, author, title, art_file, in_files, ffmpeg_input_format_options="", tempo=1.0):
         """All-in-one method to generate a book once all the necessary information is given."""
 
         # Get the chapter name
@@ -1774,7 +1774,7 @@ def copyMetaData(in_file, out_file):
     out_book.postProcess()
 
 
-def setTempo(audio_file, in_file, ffmpeg_input_format_options="", tempo="1.0"):
+def setTempo(audio_file, in_file, ffmpeg_input_format_options="", tempo=1.0):
     """Re-encode file to another tempo (for devices that can't do it on the fly: android)
     Basically the same as combine_and_encode except it preserves metadata and adjusts chapters"""
 
@@ -1788,7 +1788,7 @@ def setTempo(audio_file, in_file, ffmpeg_input_format_options="", tempo="1.0"):
     cl.populateFromAudioFile(audio_file)
 
     # adjust the chapters and save out to file
-    cl.adjustTempo(float(tempo))
+    cl.adjustTempo(tempo)
 
     basename = os.path.splitext(audio_file)[0]
     chapter_txt = basename + ".chapters.txt"
@@ -1871,22 +1871,22 @@ if __name__ == "__main__":
     cae = subparsers.add_parser("combine_and_encode", help="Combine and encode audio files.")
     cae.add_argument("audio_file", help="Output audiobook file (e.g. Book.m4b).")
     cae.add_argument("in_files", nargs="+", help="Input audio files.")
-    cae.add_argument("--ffmpeg_input_format_options", help="FFmpeg input format options.")
-    cae.add_argument("--tempo", type=float, default="1.0", help="Playback tempo ratio (e.g. 1.1 for 10%% faster).")
+    cae.add_argument("--ffmpeg_input_format_options", default="", help="FFmpeg input format options.")
+    cae.add_argument("--tempo", type=float, default=1.0, help="Playback tempo ratio (e.g. 1.1 for 10%% faster).")
 
     # --- reencode ---
     reenc = subparsers.add_parser("reencode", help="Reencode audio files.")
     reenc.add_argument("output_dir", help="Output directory.")
     reenc.add_argument("audio_ext", choices=audio_extensions, help="Output audio format.")
     reenc.add_argument("in_files", nargs="+", help="Input audio files.")
-    reenc.add_argument("--ffmpeg_input_format_options", help="FFmpeg input format options.")
-    reenc.add_argument("--tempo", type=float, default="1.0", help="Playback tempo ratio.")
+    reenc.add_argument("--ffmpeg_input_format_options", default="", help="FFmpeg input format options.")
+    reenc.add_argument("--tempo", type=float, default=1.0, help="Playback tempo ratio.")
 
     # --- gen_chapter_list ---
     gcl = subparsers.add_parser("gen_chapter_list", help="Generate a chapter list from audio files.")
     gcl.add_argument("chapter_file", help="Output chapter list file (e.g. Book.chapters.txt).")
     gcl.add_argument("in_files", nargs="+", help="Input audio files.")
-    gcl.add_argument("--tempo", type=float, default="1.0", help="Playback tempo ratio.")
+    gcl.add_argument("--tempo", type=float, default=1.0, help="Playback tempo ratio.")
     gcl.add_argument("--format", choices=book_extensions, default="m4b", help="Output format extension.")
 
     # --- convert_chapter_list ---
@@ -1964,14 +1964,14 @@ if __name__ == "__main__":
     bff.add_argument("title", help="Book title.")
     bff.add_argument("image_file", help="Cover art image.")
     bff.add_argument("in_files", nargs="+", help="Input audio files.")
-    bff.add_argument("--ffmpeg_input_format_options", help="FFmpeg input format options.")
-    bff.add_argument("--tempo", type=float, default="1.0", help="Playback tempo ratio.")
+    bff.add_argument("--ffmpeg_input_format_options", default="", help="FFmpeg input format options.")
+    bff.add_argument("--tempo", type=float, default=1.0, help="Playback tempo ratio.")
 
     # --- set_book_tempo ---
     sbt = subparsers.add_parser("set_book_tempo", help="Create new audiobook with adjusted tempo.")
     sbt.add_argument("book_file", help="Output audiobook file.")
     sbt.add_argument("in_book_file", help="Original audiobook file.")
-    sbt.add_argument("--ffmpeg_input_format_options", help="FFmpeg input format options.")
+    sbt.add_argument("--ffmpeg_input_format_options", default="", help="FFmpeg input format options.")
     sbt.add_argument("tempo", type=float, help="Tempo ratio.")
 
     # --- extract_tracks ---
@@ -1980,7 +1980,6 @@ if __name__ == "__main__":
     et.add_argument("output_dir", help="Directory for extracted tracks.")
     et.add_argument("--chapter_file", help="Chapter list file.")
     et.add_argument("--chapter_format", choices=book_extensions, help="Chapter format.")
-
 
     args = parser.parse_args()
 

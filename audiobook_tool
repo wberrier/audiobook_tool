@@ -77,8 +77,6 @@ cmd_line_dependencies = {
     'mp4tags': '',
     'mp4file': '',
     'mp4info': '',
-    'soxi': '',
-    'sox': '',  # needed for tempo
     'cdparanoia': '',
     'icedax': '',
     'cd-discid': '',  # needed for the icedax ripper
@@ -125,23 +123,21 @@ class ChapterListFormatError(Exception):
 def lengthInSecondsFFmpeg(file,  ffmpeg_output_profile, tempo=1.0):
     """Decode input using ffmpeg to determine the length of the input
 
-    Optionally takes a tempo arg, in which the file is first run through a sox pipe
+    Optionally takes a tempo arg, in which a tempo audio filter is used
 
     """
 
     output_rate = ffmpeg_output_profile['sample_rate']
 
-    wc_cmd = "wc --bytes"
-    ffmpeg_decode_cmd = "%s %s -y -i %s -acodec pcm_s16le -f s16le -ar %s -ac %s - %s" % (ffmpeg_program, ffmpeg_verbosity, shellQuote(file), output_rate, output_channels, null_pipe)
-    # Run through a sox pipe if we want to change the tempo
-    #  Note: have sox write out to stdout, and count with wc.  Should be accurate, as ffmpeg is doing the decoding
+    # Run through a tempo filter if we want to change the tempo
+    tempo_filter = ""
     if tempo != 1.0:
-        sox_cmd = "sox -L -t s2 -r %s -c %s - -t s2 -r %s -c %s - tempo %s 30" % (output_rate, output_channels, output_rate, output_channels, tempo)
-        command = "%s | %s 2>/dev/null | %s" % (ffmpeg_decode_cmd, sox_cmd, wc_cmd)
+        tempo_filter = build_atempo_filters(tempo)
 
-    # Normal decode without the sox pipe
-    else:
-        command = "%s | %s" % (ffmpeg_decode_cmd, wc_cmd)
+    wc_cmd = "wc --bytes"
+    ffmpeg_decode_cmd = "%s %s -y -i %s %s -acodec pcm_s16le -f s16le -ar %s -ac %s - %s" % (ffmpeg_program, ffmpeg_verbosity, shellQuote(file), tempo_filter, output_rate, output_channels, null_pipe)
+
+    command = "%s | %s" % (ffmpeg_decode_cmd, wc_cmd)
 
     status, output = subprocess.getstatusoutput(command)
     # If there was a return code error, or we counted 0 bytes -> error
@@ -157,49 +153,6 @@ def lengthInSecondsFFmpeg(file,  ffmpeg_output_profile, tempo=1.0):
         print("Output: " + output)
         raise WavConversionError("Unable to convert file to .wav: " + file)
     return results
-
-
-# Interesting bits:
-# Sample Rate    : 22050
-# Duration       : 00:04:51.92 = 6436800 samples ~ 21893.9 CDDA sectors
-# soxi_duration_re = re.compile("Sample Rate\s+: (\d+).*Duration\s+: \d\d:\d\d:\d\d\.\d\d = (\d+) samples")
-# Fine, break into two regexes, since I can't seem to match both in one pass (even with re.DOTALL)
-soxi_sample_rate_re = re.compile(r"Sample Rate\s+: (\d+)")
-soxi_duration_re = re.compile(r"Duration\s+: \d\d:\d\d:\d\d\.\d\d = (\d+) samples")
-
-
-def lengthInSecondsSoxi(file, ffmpeg_output_profile, tempo=1.0):
-    """
-    Use soxi to determine wave file lengths, and ffmpeg decoding for all others.
-
-    Using ffmpeg to both convert to wav and to encode could also be contributing to the accuracy.  Different results
-    are gotten when using mplayer to convert to a wav file (header info, or actual file output? Not sure...)
-    """
-
-    decodeRequired = False
-    if os.path.splitext(file)[1] != ".wav" or tempo != 1.0:
-        decodeRequired = True
-
-    if decodeRequired:
-        seconds = lengthInSecondsFFmpeg(file, ffmpeg_output_profile, tempo)
-    else:
-        status, output = subprocess.getstatusoutput("soxi %s" % shellQuote(file))
-
-        try:
-            (sample_rate,) = soxi_sample_rate_re.search(output).groups()
-            (num_samples,) = soxi_duration_re.search(output).groups()
-        except Exception:
-            raise LengthRetrievalError("Failed to parse: " + output)
-        seconds = float(num_samples) / float(sample_rate)
-        # TODO: check to see if "seconds = float(num_samples) / (float(sample_rate) * float(tempo))"
-        #       would suffice instead of sending the wave file through sox when a tempo is given
-
-    return float(seconds)
-
-# TODO: method that manually parses wav header . we'd also have to know the specs from the wav header... ugh
-#   but still, ffmpeg method only gives hundredths, where having thousandsth would help
-#   (one hundred of a second rounding for a hundred chapters: could be 1 second off!)
-# -> shelling out to soxi is probably sufficient
 
 
 def runOrDie(command, error_message=""):
@@ -324,7 +277,7 @@ class ChapterList:
 
         try:
             # Update the cumalative time
-            self.currentTimeMark += lengthInSecondsSoxi(filename, ffmpeg_output_profiles[self.chapter_format], tempo)
+            self.currentTimeMark += lengthInSecondsFFmpeg(filename, ffmpeg_output_profiles[self.chapter_format], tempo)
         except(LengthRetrievalError):
             print("Error reading file: " + filename)
             sys.exit(1)
@@ -982,6 +935,32 @@ def buildFilesString(files):
     return ret
 
 
+# ---------------------------
+# Helper: build atempo filter chain for arbitrary tempo ratio
+# ffmpeg atempo supports 0.5-2.0 per filter; chain multiple if necessary.
+# NOTE: AI generated and then modified
+# ---------------------------
+def build_atempo_filters(tempo: float) -> str:
+    if tempo <= 0:
+        raise ValueError("tempo must be > 0")
+    # Decompose tempo into chain of factors between 0.5 and 2.0 inclusive
+    factors = []
+    remaining = tempo
+    # Greedy: if remaining > 2, append 2 and reduce
+    while remaining > 2.0:
+        factors.append(2.0)
+        remaining /= 2.0
+    # If remaining < 0.5, multiply by 2 until >=0.5 (and divide factors accordingly)
+    while remaining < 0.5:
+        factors.append(0.5)
+        remaining /= 0.5  # remaining becomes larger
+    # Finally append the remaining factor
+    factors.append(remaining)
+    # Build filter string
+    filters = ",".join(f"atempo={f:.6f}" for f in factors)
+    return "-filter:a {}".format(filters)
+
+
 # Combines a bunch of audio files to a single mp3, m4b, or ogg audiobook
 #  Supports any audio files supported by ffmpeg
 #  Do this in one pass to avoid a path using intermediate files going to wav, raw, and then output
@@ -1016,24 +995,21 @@ def encodeFiles(output, output_extension, in_files, ffmpeg_input_options, tempo)
 
     error_filename = "/tmp/audiobook_tool_error.%s" % os.getpid()
 
-    # Set up sox pipe for tempo option
-    sox_pipe = ""
+    # Set up an audio filter for tempo option
+    tempo_filter = ""
     if tempo != 1.0:
-        # tempo segment of 30 (recommended for speech)
-        sox_pipe = "| sox -L -t s2 -r %s -c %s - -L -t s2 -r %s -c %s - tempo %s 30" % (output_rate, output_channels, output_rate, output_channels, tempo)
+        tempo_filter = build_atempo_filters(tempo)
 
     # Command to loop through all the input files and output to stdout
     #  Use the output rate and channels to cut down on conversions
     #  (note: a fifo was attempted, but the fifo would randomly close prematurely)
     #  Use a tmp file to carry the error code through the pipe
     intermediate_format_options = "-ar %s -ac %s -f s16le" % (output_rate, output_channels)
-    # TODO: gather length by converting to a wav, getting the size via sox, piping with ffmpeg, and then cleaning up the wav file?
-    #  that "could" be faster overall, even though it would slow down this step (writing each wav file to disc)
     player_command = "for i in %s ; do echo \"Encoding $i\" >&2; %s %s -y -i \"$i\" %s %s - %s || { echo '' >&2; echo \"****** Failed to decode $i ******\" >&2 ; echo '' >&2 ; touch %s ; exit 1 ; } ; done""" % (buildFilesString(in_files), ffmpeg_program, ffmpeg_verbosity, ffmpeg_input_options, intermediate_format_options, null_pipe, shellQuote(error_filename))
 
     # Now run the command to convert all data coming from stdin
     output_format_options = "-acodec %s %s -ar %s -ab %s -ac %s -f %s" % (output_codec, codec_options, output_rate, output_bitrate, output_channels, output_format)
-    runOrDie("rm -f %s ; ( %s ) %s | %s %s -y %s -i - %s %s %s" % (shellQuote(error_filename), player_command, sox_pipe, ffmpeg_program, ffmpeg_verbosity, intermediate_format_options, output_format_options, shellQuote(output), null_pipe), error_message="Encoding failed")
+    runOrDie("rm -f %s ; ( %s ) | %s %s -y %s -i - %s %s %s %s" % (shellQuote(error_filename), player_command, ffmpeg_program, ffmpeg_verbosity, intermediate_format_options, tempo_filter, output_format_options, shellQuote(output), null_pipe), error_message="Encoding failed")
 
     if os.path.exists(error_filename):
         print("")

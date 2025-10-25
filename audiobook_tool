@@ -16,6 +16,7 @@ import argparse
 import glob
 import subprocess
 import base64
+import shlex
 
 # for matroska tags
 import xml.etree.ElementTree
@@ -91,11 +92,6 @@ cmd_line_dependencies = {
 ####################################################
 
 
-def shellQuote(str):
-    """TODO: use shlex?"""
-    return "'" + str.replace("'", "'\\''") + "'"
-
-
 class LengthRetrievalError(Exception):
     def __init__(self, value):
         self.value = value
@@ -135,7 +131,7 @@ def lengthInSecondsFFmpeg(file,  ffmpeg_output_profile, tempo=1.0):
         tempo_filter = build_atempo_filters(tempo)
 
     wc_cmd = "wc --bytes"
-    ffmpeg_decode_cmd = "%s %s -y -i %s %s -acodec pcm_s16le -f s16le -ar %s -ac %s - %s" % (ffmpeg_program, ffmpeg_verbosity, shellQuote(file), tempo_filter, output_rate, output_channels, null_pipe)
+    ffmpeg_decode_cmd = "%s %s -y -i %s %s -acodec pcm_s16le -f s16le -ar %s -ac %s - %s" % (ffmpeg_program, ffmpeg_verbosity, shlex.quote(file), tempo_filter, output_rate, output_channels, null_pipe)
 
     command = "%s | %s" % (ffmpeg_decode_cmd, wc_cmd)
 
@@ -388,7 +384,7 @@ class M4bChapterList(ChapterList):
         no_chapters_re = re.compile(r"File .* does not contain chapters of type QuickTime and Nero")
 
         # TODO: mp4chaps actually supports "--export" to do this thing
-        (status, output) = subprocess.getstatusoutput("mp4chaps --list %s" % shellQuote(filename))
+        (status, output) = subprocess.getstatusoutput("mp4chaps --list %s" % shlex.quote(filename))
 
         # Check for empty chapter
         if no_chapters_re.search(output):
@@ -489,7 +485,7 @@ class MkaChapterList(CommentFormatChapterList):
     def populateFromAudioFile(self, filename):
         """ Specialied method """
 
-        (status, output) = subprocess.getstatusoutput("mkvextract chapters %s -s" % shellQuote(filename))
+        (status, output) = subprocess.getstatusoutput("mkvextract chapters %s -s" % shlex.quote(filename))
 
         self.populateFromChapterOutput(output)
 
@@ -768,14 +764,14 @@ class CdParanoia(CdRipperInterface):
         return "cdparanoia -Q %s 2>/dev/null" % self._extraCommandArguments()
 
     def ripCommand(self, track_count, track_filename):
-        return "cdparanoia %s --output-wav %d %s" % (self._extraCommandArguments(), track_count, shellQuote(track_filename))
+        return "cdparanoia %s --output-wav %d %s" % (self._extraCommandArguments(), track_count, shlex.quote(track_filename))
 
     def _extraCommandArguments(self):
         """Private method to get some options"""
         options = ""
 
         if self.device:
-            options += " -d " + shellQuote(self.device)
+            options += " -d " + shlex.quote(self.device)
 
         if self.ignore_errors:
             options += " -Z "
@@ -798,7 +794,7 @@ class IceDax(CdRipperInterface):
 
     def ripCommand(self, track_count, track_filename):
         # NOTE: "--verbose-level titles" is to reduce output
-        return "icedax %s --no-infofile --track %d --verbose-level titles %s" % (self._extraCommandArguments(), track_count, shellQuote(track_filename))
+        return "icedax %s --no-infofile --track %d --verbose-level titles %s" % (self._extraCommandArguments(), track_count, shlex.quote(track_filename))
 
     def _extraCommandArguments(self):
         """Private method to get some options"""
@@ -807,7 +803,7 @@ class IceDax(CdRipperInterface):
         options = ""
 
         if self.device:
-            options += " -device " + shellQuote(self.device)
+            options += " -device " + shlex.quote(self.device)
 
         if not self.ignore_errors:
             # uses libparanoia
@@ -881,11 +877,11 @@ def interactivelyRipCds(output, cd_device, ignore_errors, cd_backend, disc_count
 
                 # Testing
                 # print "Running command: " + command_to_run
-                # os.system("touch %s" % shellQuote(track_filename))
+                # os.system("touch %s" % shlex.quote(track_filename))
 
             track_count += 1
 
-        runOrDie("eject %s" % (shellQuote(cd_device) if cd_device else ""))
+        runOrDie("eject %s" % (shlex.quote(cd_device) if cd_device else ""))
         disc_count += 1
 
         if re.search("(n|no)", askQuestion("Continue with disk %d? [Yn]" % disc_count), re.IGNORECASE):
@@ -931,7 +927,7 @@ def convertChapterList(chapter_file, chapter_format, new_chapter_file, new_chapt
 def buildFilesString(files):
     ret = ""
     for f in files:
-        ret += " %s" % shellQuote(f)
+        ret += " %s" % shlex.quote(f)
     return ret
 
 
@@ -1005,11 +1001,11 @@ def encodeFiles(output, output_extension, in_files, ffmpeg_input_options, tempo)
     #  (note: a fifo was attempted, but the fifo would randomly close prematurely)
     #  Use a tmp file to carry the error code through the pipe
     intermediate_format_options = "-ar %s -ac %s -f s16le" % (output_rate, output_channels)
-    player_command = "for i in %s ; do echo \"Encoding $i\" >&2; %s %s -y -i \"$i\" %s %s - %s || { echo '' >&2; echo \"****** Failed to decode $i ******\" >&2 ; echo '' >&2 ; touch %s ; exit 1 ; } ; done""" % (buildFilesString(in_files), ffmpeg_program, ffmpeg_verbosity, ffmpeg_input_options, intermediate_format_options, null_pipe, shellQuote(error_filename))
+    player_command = "for i in %s ; do echo \"Encoding $i\" >&2; %s %s -y -i \"$i\" %s %s - %s || { echo '' >&2; echo \"****** Failed to decode $i ******\" >&2 ; echo '' >&2 ; touch %s ; exit 1 ; } ; done""" % (buildFilesString(in_files), ffmpeg_program, ffmpeg_verbosity, ffmpeg_input_options, intermediate_format_options, null_pipe, shlex.quote(error_filename))
 
     # Now run the command to convert all data coming from stdin
     output_format_options = "-acodec %s %s -ar %s -ab %s -ac %s -f %s" % (output_codec, codec_options, output_rate, output_bitrate, output_channels, output_format)
-    runOrDie("rm -f %s ; ( %s ) | %s %s -y %s -i - %s %s %s %s" % (shellQuote(error_filename), player_command, ffmpeg_program, ffmpeg_verbosity, intermediate_format_options, tempo_filter, output_format_options, shellQuote(output), null_pipe), error_message="Encoding failed")
+    runOrDie("rm -f %s ; ( %s ) | %s %s -y %s -i - %s %s %s %s" % (shlex.quote(error_filename), player_command, ffmpeg_program, ffmpeg_verbosity, intermediate_format_options, tempo_filter, output_format_options, shlex.quote(output), null_pipe), error_message="Encoding failed")
 
     if os.path.exists(error_filename):
         print("")
@@ -1095,9 +1091,9 @@ def playChapterSample(chapter_txt, audio_file, chapter_index, offset=0.0):
         # Different methods to play the file
         # TODO: add back play duration support (I think only mplayer supports this)
         #  Idea being you can play each track for 1 second to easily scan them
-        runOrDie("mplayer -ss %.3f %s >/dev/null 2>&1" % (chapter.timeMark + offset, shellQuote(audio_file)))
+        runOrDie("mplayer -ss %.3f %s >/dev/null 2>&1" % (chapter.timeMark + offset, shlex.quote(audio_file)))
 
-        # runOrDie("ffplay -ss %.3f %s 2>/dev/null" % (chapter.timeMark + offset, shellQuote(audio_file)))
+        # runOrDie("ffplay -ss %.3f %s 2>/dev/null" % (chapter.timeMark + offset, shlex.quote(audio_file)))
 
 
 def adjustChapter(chapter_format, chapter_txt, chapter_index, seconds, cascade):
@@ -1211,7 +1207,7 @@ class M4bAudioBook(AudioBook):
 
         # Remove all chapters
         #  (fails if list doesn't exist... oh well)
-        os.system("mp4chaps --remove %s" % shellQuote(self.audio_file))
+        os.system("mp4chaps --remove %s" % shlex.quote(self.audio_file))
 
         # Put correct chapter file in place if needs be, and clean up afterwards
         #  (TODO: if mp4v2 every gets python bindings, we won't have to do this kind of work around)
@@ -1222,7 +1218,7 @@ class M4bAudioBook(AudioBook):
             cleanup = True
 
         # Inject chapters
-        runOrDie("mp4chaps --import %s" % shellQuote(self.audio_file))
+        runOrDie("mp4chaps --import %s" % shlex.quote(self.audio_file))
 
         if cleanup:
             os.unlink(tool_expected_chapter_file)
@@ -1239,7 +1235,7 @@ class M4bAudioBook(AudioBook):
         #  Use double quotes so apostraphes can be used in titles
         # Itunes audiobooks uses the album as the top level tree, and then the title in the subtree.
         #  TODO: maybe have optional title (song) for when books must be split into two
-        runOrDie("mp4tags -i audiobook -artist %s -album %s -song %s %s" % (shellQuote(author), shellQuote(title), shellQuote(trackTitle), shellQuote(self.audio_file)))
+        runOrDie("mp4tags -i audiobook -artist %s -album %s -song %s %s" % (shlex.quote(author), shlex.quote(title), shlex.quote(trackTitle), shlex.quote(self.audio_file)))
 
     def setCoverArt(self, image_file):
 
@@ -1249,8 +1245,8 @@ class M4bAudioBook(AudioBook):
 
         # Set/Replace Coverart
         # (fails if no art is set... oh well)
-        os.system("mp4art --remove %s" % shellQuote(self.audio_file))
-        runOrDie("mp4art --add %s %s" % (shellQuote(image_file), shellQuote(self.audio_file)))
+        os.system("mp4art --remove %s" % shlex.quote(self.audio_file))
+        runOrDie("mp4art --add %s %s" % (shlex.quote(image_file), shlex.quote(self.audio_file)))
 
     def postProcess(self):
 
@@ -1258,7 +1254,7 @@ class M4bAudioBook(AudioBook):
 
         # PostProcess
         # -> optimizes mp4 file for http streaming
-        runOrDie("mp4file --optimize %s" % (shellQuote(self.audio_file)))
+        runOrDie("mp4file --optimize %s" % (shlex.quote(self.audio_file)))
 
     def getMetaData(self):
 
@@ -1268,7 +1264,7 @@ class M4bAudioBook(AudioBook):
         title = ""
         trackTitle = ""
 
-        (status, output) = subprocess.getstatusoutput("mp4info %s" % shellQuote(self.audio_file))
+        (status, output) = subprocess.getstatusoutput("mp4info %s" % shlex.quote(self.audio_file))
 
         for line in output.split("\n"):
             title_ret = re.search(" Name: (.*)", line)
@@ -1294,7 +1290,7 @@ class M4bAudioBook(AudioBook):
         AudioBook.getCoverArt(self)
 
         # Get Coverart
-        os.system("mp4art --overwrite --force --extract %s" % shellQuote(self.audio_file))
+        os.system("mp4art --overwrite --force --extract %s" % shlex.quote(self.audio_file))
 
         files = []
 
@@ -1316,7 +1312,7 @@ class MkaAudioBook(AudioBook):
         AudioBook.setChapters(self, chapter_txt)
 
         # Inject chapters
-        runOrDie("mkvpropedit %s --chapters %s" % (shellQuote(self.audio_file), shellQuote(chapter_txt)))
+        runOrDie("mkvpropedit %s --chapters %s" % (shlex.quote(self.audio_file), shlex.quote(chapter_txt)))
 
     def setMetaData(self, author, title, trackTitle=""):
 
@@ -1362,10 +1358,10 @@ class MkaAudioBook(AudioBook):
         # Use mkvmerge instead to work around this (luckily it runs pretty quickly)
         # NOTE: "--track-name" needs to go before the input filename (and id starts at 0)
         #  see: https://www.reddit.com/r/mkvtoolnix/comments/g8h8vm/mkvmerge_set_multiple_track_names/
-        runOrDie("mkvmerge --title %s --no-video --global-tags %s --output %s --track-name 0:%s %s" % (shellQuote(title), shellQuote(xml_filename), shellQuote(temp_filename), shellQuote(trackTitle), shellQuote(self.audio_file)))
+        runOrDie("mkvmerge --title %s --no-video --global-tags %s --output %s --track-name 0:%s %s" % (shlex.quote(title), shlex.quote(xml_filename), shlex.quote(temp_filename), shlex.quote(trackTitle), shlex.quote(self.audio_file)))
 
         # Replace original file with new file
-        runOrDie("mv %s %s" % (shellQuote(temp_filename), shellQuote(self.audio_file)))
+        runOrDie("mv %s %s" % (shlex.quote(temp_filename), shlex.quote(self.audio_file)))
 
         # Clean up
         os.unlink(xml_filename)
@@ -1378,8 +1374,8 @@ class MkaAudioBook(AudioBook):
 
         # Set/Replace Coverart
         # TODO: there needs to be some coordination on how to set cover art for matroska
-        os.system("mkvpropedit %s --delete-attachment 1" % (shellQuote(self.audio_file)))
-        runOrDie("mkvpropedit %s --attachment-name cover --add-attachment %s" % (shellQuote(self.audio_file), shellQuote(image_file)))
+        os.system("mkvpropedit %s --delete-attachment 1" % (shlex.quote(self.audio_file)))
+        runOrDie("mkvpropedit %s --attachment-name cover --add-attachment %s" % (shlex.quote(self.audio_file), shlex.quote(image_file)))
 
     def postProcess(self):
 
@@ -1396,7 +1392,7 @@ class MkaAudioBook(AudioBook):
         trackTitle = ""  # TODO
 
         # First the info
-        (status, output) = subprocess.getstatusoutput("mkvinfo %s" % shellQuote(self.audio_file))
+        (status, output) = subprocess.getstatusoutput("mkvinfo %s" % shlex.quote(self.audio_file))
 
         for line in output.split("\n"):
             title_ret = re.search("Title: (.*)", line)
@@ -1406,7 +1402,7 @@ class MkaAudioBook(AudioBook):
                 trackTitle = title
 
         # Now for the tags
-        (status, xml_output) = subprocess.getstatusoutput("mkvextract tags %s" % shellQuote(self.audio_file))
+        (status, xml_output) = subprocess.getstatusoutput("mkvextract tags %s" % shlex.quote(self.audio_file))
 
         try:
             # Get the artist
@@ -1435,7 +1431,7 @@ class MkaAudioBook(AudioBook):
         # Get Coverart
         # NOTE: this just gets them from where we put them
         # We could go through all attachments looking for image mime-types
-        os.system("mkvextract attachments %s 1:cover.jpg " % shellQuote(self.audio_file))
+        os.system("mkvextract attachments %s 1:cover.jpg " % shlex.quote(self.audio_file))
 
         if os.path.exists("cover.jpg"):
             return ["cover.jpg"]
@@ -1813,7 +1809,7 @@ def extractTracks(audio_file, chapter_format, chapter_file, output_dir):
         if i != cl.size():
             end_time_options = " -to " + cl.getChapter(i + 1).timeString()
 
-        command = "ffmpeg -y -i " + shellQuote(audio_file) + start_time_options + end_time_options + " " + shellQuote(chapter_out_file)
+        command = "ffmpeg -y -i " + shlex.quote(audio_file) + start_time_options + end_time_options + " " + shlex.quote(chapter_out_file)
 
         runOrDie(command)
 

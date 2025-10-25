@@ -9,6 +9,7 @@
 
 import sys
 import os
+import os.path
 import re
 import time
 import shutil
@@ -989,27 +990,28 @@ def encodeFiles(output, output_extension, in_files, ffmpeg_input_options, tempo)
     output_format = ffmpeg_output_profiles[output_extension]['format']
     output_rate = ffmpeg_output_profiles[output_extension]['sample_rate']
 
-    error_filename = "/tmp/audiobook_tool_error.%s" % os.getpid()
+    input_filelist_filename = "/tmp/audiobook_tool_filelist.%s" % os.getpid()
 
     # Set up an audio filter for tempo option
     tempo_filter = ""
     if tempo != 1.0:
         tempo_filter = build_atempo_filters(tempo)
 
-    # Command to loop through all the input files and output to stdout
-    #  Use the output rate and channels to cut down on conversions
-    #  (note: a fifo was attempted, but the fifo would randomly close prematurely)
-    #  Use a tmp file to carry the error code through the pipe
-    intermediate_format_options = "-ar %s -ac %s -f s16le" % (output_rate, output_channels)
-    player_command = "for i in %s ; do echo \"Encoding $i\" >&2; %s %s -y -i \"$i\" %s %s - %s || { echo '' >&2; echo \"****** Failed to decode $i ******\" >&2 ; echo '' >&2 ; touch %s ; exit 1 ; } ; done""" % (buildFilesString(in_files), ffmpeg_program, ffmpeg_verbosity, ffmpeg_input_options, intermediate_format_options, null_pipe, shlex.quote(error_filename))
+    # Write files to filelist for ffmpeg to take as input
+    with open(input_filelist_filename, 'w') as file:
+        for f in in_files:
+            file.write("file {}\n".format(shlex.quote(os.path.abspath(f))))
 
-    # Now run the command to convert all data coming from stdin
     output_format_options = "-acodec %s %s -ar %s -ab %s -ac %s -f %s" % (output_codec, codec_options, output_rate, output_bitrate, output_channels, output_format)
-    runOrDie("rm -f %s ; ( %s ) | %s %s -y %s -i - %s %s %s %s" % (shlex.quote(error_filename), player_command, ffmpeg_program, ffmpeg_verbosity, intermediate_format_options, tempo_filter, output_format_options, shlex.quote(output), null_pipe), error_message="Encoding failed")
+    command = "%s -hide_banner -v info -y -f concat -safe 0 -i %s %s %s %s" % (ffmpeg_program, input_filelist_filename, tempo_filter, output_format_options, shlex.quote(output))
 
-    if os.path.exists(error_filename):
+    print("Running: " + command)
+    ret = os.system(command)
+    os.unlink(input_filelist_filename)
+
+    if ret != 0:
         print("")
-        print("Failed to decode input files!")
+        print("Failed to encode input files!")
         print("")
         print("Suggestion: specify ffmpeg input options with '--ffmpeg_input_format_options'")
         print("")
@@ -1023,7 +1025,6 @@ def encodeFiles(output, output_extension, in_files, ffmpeg_input_options, tempo)
         print("")
         print("Suggestion 3: Use mythffmpeg instead of ffmpeg by adjusting ffmpeg_program at the top of this file")
         print("")
-        os.unlink(error_filename)
         sys.exit(1)
 
     print("Success!")

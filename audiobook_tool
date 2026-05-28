@@ -1000,7 +1000,9 @@ def encodeFiles(output, output_extension, in_files, ffmpeg_input_options, tempo)
     # Write files to filelist for ffmpeg to take as input
     with open(input_filelist_filename, 'w') as file:
         for f in in_files:
-            file.write("file {}\n".format(shlex.quote(os.path.abspath(f))))
+            # NOTE: very specific quote escaping required by ffmpeg when reading files from an input file
+            # the problematic case was a file with a single quote
+            file.write("file '{}'\n".format(os.path.abspath(f.replace("'", "'\\''"))))
 
     output_format_options = "-acodec %s %s -ar %s -ab %s -ac %s -f %s" % (output_codec, codec_options, output_rate, output_bitrate, output_channels, output_format)
     command = "%s -hide_banner -v info -y -f concat -safe 0 -i %s %s %s %s" % (ffmpeg_program, input_filelist_filename, tempo_filter, output_format_options, shlex.quote(output))

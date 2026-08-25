@@ -136,7 +136,7 @@ def lengthInSecondsFFmpeg(file,  ffmpeg_output_profile, tempo=1.0):
 
     command = "%s | %s" % (ffmpeg_decode_cmd, wc_cmd)
 
-    status, output = subprocess.getstatusoutput(command)
+    status, output = subprocess.getstatusoutput(command, errors="surrogateescape")
     # If there was a return code error, or we counted 0 bytes -> error
     if status or output == "0":
         print(output)
@@ -385,7 +385,7 @@ class M4bChapterList(ChapterList):
         no_chapters_re = re.compile(r"File .* does not contain chapters of type QuickTime and Nero")
 
         # TODO: mp4chaps actually supports "--export" to do this thing
-        (status, output) = subprocess.getstatusoutput("mp4chaps --list %s" % shlex.quote(filename))
+        (status, output) = subprocess.getstatusoutput("mp4chaps --list %s" % shlex.quote(filename), errors="surrogateescape")
 
         # Check for empty chapter
         if no_chapters_re.search(output):
@@ -486,7 +486,7 @@ class MkaChapterList(CommentFormatChapterList):
     def populateFromAudioFile(self, filename):
         """ Specialied method """
 
-        (status, output) = subprocess.getstatusoutput("mkvextract chapters %s -s" % shlex.quote(filename))
+        (status, output) = subprocess.getstatusoutput("mkvextract chapters %s -s" % shlex.quote(filename), errors="surrogateescape")
 
         self.populateFromChapterOutput(output)
 
@@ -1267,7 +1267,7 @@ class M4bAudioBook(AudioBook):
         title = ""
         trackTitle = ""
 
-        (status, output) = subprocess.getstatusoutput("mp4info %s" % shlex.quote(self.audio_file))
+        (status, output) = subprocess.getstatusoutput("mp4info %s" % shlex.quote(self.audio_file), errors="surrogateescape")
 
         for line in output.split("\n"):
             title_ret = re.search(" Name: (.*)", line)
@@ -1395,7 +1395,7 @@ class MkaAudioBook(AudioBook):
         trackTitle = ""  # TODO
 
         # First the info
-        (status, output) = subprocess.getstatusoutput("mkvinfo %s" % shlex.quote(self.audio_file))
+        (status, output) = subprocess.getstatusoutput("mkvinfo %s" % shlex.quote(self.audio_file), errors="surrogateescape")
 
         for line in output.split("\n"):
             title_ret = re.search("Title: (.*)", line)
@@ -1405,7 +1405,7 @@ class MkaAudioBook(AudioBook):
                 trackTitle = title
 
         # Now for the tags
-        (status, xml_output) = subprocess.getstatusoutput("mkvextract tags %s" % shlex.quote(self.audio_file))
+        (status, xml_output) = subprocess.getstatusoutput("mkvextract tags %s" % shlex.quote(self.audio_file), errors="surrogateescape")
 
         try:
             # Get the artist
@@ -1820,7 +1820,7 @@ def extractTracks(audio_file, chapter_format, chapter_file, output_dir):
 def validateDependencies(progs):
 
     for p in progs:
-        (status, output) = subprocess.getstatusoutput("which " + p)
+        (status, output) = subprocess.getstatusoutput("which " + p, errors="surrogateescape")
         if status != 0:
             print("Warning: %s not found" % p)
 
